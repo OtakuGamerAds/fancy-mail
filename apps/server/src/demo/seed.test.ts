@@ -62,14 +62,14 @@ describe("demo seed", () => {
     expect(a.services.threads.search({ query: "in:inbox" }, user).total).toBe(before + 42);
   });
 
-  it("can be removed (labels stay) and reset", () => {
-    const labels = b.services.labels.list().length;
+  it("can be removed (with the groups and labels it made, not the person's) and reset", () => {
+    const mine = b.services.labels.create({ name: "My own label" }, user);
     b.services.demo.remove(user);
     expect(b.services.bootstrap().accounts).toHaveLength(0);
     expect(b.store.db.value("SELECT COUNT(*) FROM messages")).toBe(0);
     expect(b.store.db.value("SELECT COUNT(*) FROM message_fts")).toBe(0);
     expect(b.services.groups.list()).toHaveLength(0);
-    expect(b.services.labels.list()).toHaveLength(labels);
+    expect(b.services.labels.list().map((l) => l.id)).toEqual([mine.id]);
     b.services.demo.reset(user);
     expect(b.services.bootstrap().accounts).toHaveLength(11);
   });

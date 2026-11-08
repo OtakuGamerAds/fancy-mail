@@ -267,6 +267,7 @@ export function DataSettings() {
           }
         />
       </SettingsSection>
+      {bootstrap.hasDemoData ? (
       <SettingsSection title="Demo mail" description="Made-up accounts and mail to look around with. Removing it doesn't touch your own accounts.">
         <SettingsRow
           title={bootstrap.hasDemoData ? "Demo mail is shown" : "Demo mail is removed"}
@@ -289,12 +290,13 @@ export function DataSettings() {
               ) : null}
               <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void resetDemo()}>
                 {busy === "reset" ? <Spinner size="sm" /> : null}
-                {bootstrap.hasDemoData ? "Reset" : "Bring back"}
+                Reset
               </Button>
             </span>
           }
         />
       </SettingsSection>
+      ) : null}
     </>
   );
 }

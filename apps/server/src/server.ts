@@ -13,6 +13,7 @@ import type { Db } from "./db/sqlite.ts";
 import { createLogger } from "./log.ts";
 import type { Logger } from "./log.ts";
 import { createEventBus } from "./services/bus.ts";
+import { USER } from "./services/context.ts";
 import { createServices } from "./services/index.ts";
 import type { Services } from "./services/index.ts";
 import { createVault } from "./services/vault.ts";
@@ -24,6 +25,8 @@ import { createAuth } from "./transport/auth.ts";
 import { createHttpServer } from "./transport/http.ts";
 import type { McpHandler } from "./transport/http.ts";
 import { createWsServer } from "./transport/ws.ts";
+
+const DEMO_CLEARED = "demo.cleared";
 
 export interface McpMount {
   handler: McpHandler;
@@ -80,6 +83,12 @@ export async function createServer(config: ServerConfig, options: CreateServerOp
       const started = Date.now();
       const summary = services.demo.seed();
       log.info("seeded the demo accounts", { ...summary, ms: Date.now() - started });
+    } else if (!config.seedDemo && services.demo.hasDemoData() && !store.kv.get(DEMO_CLEARED)) {
+      // The installed app starts empty. Demo mail an earlier version put in goes, once (only
+      // the demo accounts: anything the person added stays).
+      services.demo.remove(USER);
+      store.kv.set(DEMO_CLEARED, String(Date.now()));
+      log.info("removed the demo accounts");
     }
 
     const sync = (options.createSync ?? createSyncEngine)({ db, store, services, bus, vault, config, log: log.child("sync") });

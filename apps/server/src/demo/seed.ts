@@ -254,6 +254,7 @@ export interface SeedSummary {
 }
 
 const DEMO_GROUPS_KEY = "demo.groupIds";
+const DEMO_LABELS_KEY = "demo.labelIds";
 
 /** Seeds the demo accounts. Labels and groups are reused by name when they exist. */
 export function seedDemo(env: ServiceEnv, options: SeedOptions = {}): SeedSummary {
@@ -275,6 +276,7 @@ export function seedDemo(env: ServiceEnv, options: SeedOptions = {}): SeedSummar
   env.db.tx(() => {
     // Labels and groups (reused by name).
     const labelIds = new Map<string, string>();
+    const createdLabels: string[] = [];
     for (const l of DEMO_LABELS) {
       const existing = store.labels.findByName(l.name);
       if (existing) labelIds.set(l.name, existing.id);
@@ -282,8 +284,10 @@ export function seedDemo(env: ServiceEnv, options: SeedOptions = {}): SeedSummar
         const labelId = id("lbl");
         store.labels.insert({ id: labelId, name: l.name, color: l.color, sortOrder: store.labels.nextSortOrder(), createdAt: now - SPAN_DAYS * DAY });
         labelIds.set(l.name, labelId);
+        createdLabels.push(labelId);
       }
     }
+    if (createdLabels.length > 0) store.kv.set(DEMO_LABELS_KEY, JSON.stringify(createdLabels));
     const groupIds = new Map<string, string>();
     const createdGroups: string[] = [];
     for (const g of DEMO_GROUPS) {
@@ -674,6 +678,16 @@ export function removeDemo(env: ServiceEnv): string[] {
       if (store.groups.get(groupId) && store.groups.accountIds(groupId).length === 0) store.groups.delete(groupId);
     }
     store.kv.delete(DEMO_GROUPS_KEY);
+    // The labels the demo made, unless some remaining mail carries them. Demo data from before
+    // the ids were kept: the demo's label names.
+    const kept = store.kv.get(DEMO_LABELS_KEY);
+    const labels = kept
+      ? (JSON.parse(kept) as string[])
+      : DEMO_LABELS.map((l) => store.labels.findByName(l.name)?.id).filter((x): x is string => !!x);
+    for (const labelId of labels) {
+      if (store.labels.get(labelId) && store.labels.messagesWithLabel(labelId).length === 0) store.labels.delete(labelId);
+    }
+    store.kv.delete(DEMO_LABELS_KEY);
   });
   try {
     fs.rmSync(env.paths.demoAttachments, { recursive: true, force: true });

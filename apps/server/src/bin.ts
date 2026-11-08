@@ -7,7 +7,8 @@
  *   --web-dist <path>   serve the built UI from there
  *   --dev               session token from FANCY_MAIL_DEV_TOKEN; allow the Vite origin
  *   --vault-key-stdin   read {"vaultKey":"<base64 32 bytes>"} from stdin first; exit when stdin closes
- *   --no-demo           do not seed the demo accounts into a fresh database
+ *   --no-demo           start empty: no demo accounts in a fresh database, and demo accounts
+ *                       left by an earlier version are removed (once). The installed app.
  */
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";

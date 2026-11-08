@@ -12,6 +12,7 @@ import {
   InboxIcon,
   MailIcon,
   MailOpenIcon,
+  MailPlusIcon,
   OctagonAlertIcon,
   RefreshCwIcon,
   SearchIcon,
@@ -344,7 +345,9 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
 
       {/* Rows */}
       <div ref={scrollRef} role="listbox" aria-label="Conversations" className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden [overflow-anchor:none]">
-        {isPending ? (
+        {bootstrap && dir.accounts.length === 0 ? (
+          <Welcome />
+        ) : isPending ? (
           <ListSkeleton density={density} />
         ) : threadsQuery.isError && threads.length === 0 ? (
           <Empty size="compact">
@@ -443,6 +446,28 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
         </MenuPopup>
       </Menu>
     </section>
+  );
+}
+
+/** No account yet (a fresh install): what to do first. */
+function Welcome() {
+  return (
+    <Empty size="compact" className="h-full animate-fade-in">
+      <EmptyHeader>
+        <EmptyMedia>
+          <MailPlusIcon className="size-8 text-muted-foreground/70" strokeWidth={1.5} />
+        </EmptyMedia>
+        <EmptyTitle className="mt-3">Add your first account</EmptyTitle>
+        <EmptyDescription className="mt-1 max-w-72">
+          Gmail works with an app password, Outlook with Microsoft sign-in, and any other account over IMAP. Your mail stays on
+          this computer.
+        </EmptyDescription>
+      </EmptyHeader>
+      <Button size="sm" onClick={() => useUi.getState().openDialog({ type: "add-account" })}>
+        <MailPlusIcon />
+        Add account
+      </Button>
+    </Empty>
   );
 }
 

@@ -63,6 +63,7 @@ export function serverCommand(dataDir: string): { entry: string; args: string[] 
   }
   return {
     entry: path.join(process.resourcesPath, "server", "server.mjs"),
-    args: ["--data-dir", dataDir, "--web-dist", path.join(process.resourcesPath, "web"), "--vault-key-stdin"],
+    // The installed app starts empty (demo mail is for development and screenshots).
+    args: ["--data-dir", dataDir, "--web-dist", path.join(process.resourcesPath, "web"), "--vault-key-stdin", "--no-demo"],
   };
 }

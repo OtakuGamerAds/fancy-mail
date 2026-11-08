@@ -17,6 +17,7 @@ import { NoConversation, Reader } from "~/components/reader/Reader";
 import { SettingsView } from "~/components/settings/SettingsView";
 import { ShortcutsDialog } from "~/components/ShortcutsDialog";
 import { Sidebar } from "~/components/sidebar/Sidebar";
+import { useUpdateNotices } from "~/components/sidebar/UpdateButton";
 import { Spinner } from "~/components/ui/spinner";
 import { Toaster } from "~/components/ui/toast";
 import { TooltipProvider } from "~/components/ui/tooltip";
@@ -89,6 +90,7 @@ function Shell() {
   useWindowTitle();
   useKeyboard();
   useAgentActivityDot();
+  useUpdateNotices();
   const bootstrap = useBootstrap();
   const route = useUi((s) => s.route);
   const sidebarCollapsed = useUi((s) => s.sidebarCollapsed);
