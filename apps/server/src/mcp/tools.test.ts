@@ -55,6 +55,7 @@ function thread(id: string, accountId: string, subject: string): ThreadSummary {
     inTrash: false,
     inSpam: false,
     draftCount: 0,
+    category: null,
   };
 }
 

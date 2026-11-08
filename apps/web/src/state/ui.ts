@@ -2,7 +2,7 @@
  * What the client keeps of its own: where the person is, what is selected, panel sizes and
  * which overlay is open. Mail itself lives in the query cache.
  */
-import type { DraftMode } from "@fancy-mail/contracts";
+import type { DraftMode, InboxTab } from "@fancy-mail/contracts";
 import { create } from "zustand";
 
 import { clamp, safeStorage } from "~/lib/utils";
@@ -16,6 +16,9 @@ export const LIST_MAX = 760;
 export const LIST_DEFAULT = 440;
 
 export type ListFilter = "all" | "unread" | "starred" | "attachments";
+
+/** Gmail's inbox tabs: Primary, or one of the categories shown as a tab. */
+export type InboxTabId = "primary" | InboxTab;
 
 export interface ComposeState {
   /** An existing draft to continue, or null for a new message. */
@@ -54,6 +57,8 @@ interface UiState {
   /** The sidebar's search: it narrows every view (and the sidebar's counts) until cleared. */
   search: string;
   listFilter: ListFilter;
+  /** The inbox tab open (Gmail's categories); back to Primary in another view. */
+  inboxTab: InboxTabId;
 
   /** Checked conversations (multi-select). */
   selection: string[];
@@ -88,6 +93,7 @@ interface UiState {
   setListWidth(width: number): void;
   setSearch(text: string): void;
   setListFilter(filter: ListFilter): void;
+  setInboxTab(tab: InboxTabId): void;
   setSelection(ids: string[], anchor?: string | null): void;
   clearSelection(): void;
   setFocusedThread(id: string | null): void;
@@ -130,6 +136,7 @@ export const useUi = create<UiState>()((set, get) => ({
   listWidth: stored.listWidth,
   search: "",
   listFilter: "all",
+  inboxTab: "primary",
   selection: [],
   selectionAnchor: null,
   focusedThreadId: null,
@@ -152,7 +159,7 @@ export const useUi = create<UiState>()((set, get) => ({
     const prevKey = prev.page === "mail" ? JSON.stringify(prev.view) : prev.page;
     const nextKey = route.page === "mail" ? JSON.stringify(route.view) : route.page;
     if (prevKey !== nextKey) {
-      set({ route, listFilter: "all", selection: [], selectionAnchor: null });
+      set({ route, listFilter: "all", inboxTab: "primary", selection: [], selectionAnchor: null });
     } else {
       set({ route });
     }
@@ -176,6 +183,7 @@ export const useUi = create<UiState>()((set, get) => ({
   },
   setSearch: (search) => set({ search }),
   setListFilter: (listFilter) => set({ listFilter, selection: [], selectionAnchor: null }),
+  setInboxTab: (inboxTab) => set({ inboxTab, selection: [], selectionAnchor: null }),
   setSelection: (selection, anchor) =>
     set((s) => ({ selection, selectionAnchor: anchor === undefined ? s.selectionAnchor : anchor })),
   clearSelection: () => set({ selection: [], selectionAnchor: null }),

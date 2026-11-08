@@ -4,15 +4,17 @@
  * sidebar), and the virtualized rows. New messages still being written sit at the top of
  * their inbox. When the view or the search changes, the new rows slide in.
  */
-import type { Draft, ThreadSummary, ViewScope } from "@fancy-mail/contracts";
+import type { Draft, InboxTab, ThreadSummary, ViewScope } from "@fancy-mail/contracts";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
   InboxIcon,
+  InfoIcon,
   MailIcon,
   MailOpenIcon,
   MailPlusIcon,
+  MessagesSquareIcon,
   OctagonAlertIcon,
   RefreshCwIcon,
   SearchIcon,
@@ -21,7 +23,9 @@ import {
   TagIcon,
   Trash2Icon,
   Undo2Icon,
+  UsersIcon,
   XIcon,
+  type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 
@@ -44,10 +48,10 @@ import { syncNow } from "~/state/actions";
 import { archiveOrInbox, runThreadCommand, spamOrNot, toggleRead, toggleStar, trashOrRestore } from "~/state/commands";
 import { listNav } from "~/state/listNav";
 import { openConversation } from "~/state/openConversation";
-import { useBootstrap, useDirectory, useDrafts, useThreads, type Directory } from "~/state/queries";
+import { useBootstrap, useDirectory, useDrafts, useSearchFacets, useThreads, type Directory } from "~/state/queries";
 import { viewKey, type ViewRef } from "~/state/router";
-import { useUi, type ListFilter } from "~/state/ui";
-import { describeView, listQuery, searchWidens } from "~/state/view";
+import { useUi, type InboxTabId, type ListFilter } from "~/state/ui";
+import { describeView, inboxTabQuery, listQuery, searchWidens } from "~/state/view";
 
 const FILTERS: { id: ListFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -55,6 +59,14 @@ const FILTERS: { id: ListFilter; label: string }[] = [
   { id: "starred", label: "Starred" },
   { id: "attachments", label: "Attachments" },
 ];
+
+const INBOX_TABS: Record<InboxTabId, { label: string; icon: LucideIcon }> = {
+  primary: { label: "Primary", icon: InboxIcon },
+  promotions: { label: "Promotions", icon: TagIcon },
+  social: { label: "Social", icon: UsersIcon },
+  updates: { label: "Updates", icon: InfoIcon },
+  forums: { label: "Forums", icon: MessagesSquareIcon },
+};
 
 const EXAMPLES = ["from:anna has:attachment", "is:unread newer_than:7d"];
 
@@ -87,6 +99,7 @@ function draftRow(draft: Draft): ThreadSummary {
     inTrash: false,
     inSpam: false,
     draftCount: 1,
+    category: null,
   };
 }
 
@@ -103,10 +116,17 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
   const selection = useUi((s) => s.selection);
   const filter = useUi((s) => s.listFilter);
 
-  // ── The query: the view, the sidebar's search, the filter chip ──
+  // ── The query: the view, the inbox tab, the sidebar's search, the filter chip ──
   const rawSearch = useUi((s) => s.search);
   const search = useDebounced(rawSearch, 150).trim();
-  const query = listQuery(view, info, search, filter);
+  // Gmail's tabs, in an inbox with Gmail mail (a search looks through all of them).
+  const shownTabs = bootstrap?.settings.inboxTabs ?? [];
+  const hasTabs =
+    view.kind === "inbox" && shownTabs.length > 0 && dir.accounts.some((a) => (a.provider === "gmail" || a.provider === "demo") && inScope(a.id, info.scope, dir));
+  const storedTab = useUi((s) => s.inboxTab);
+  const tab: InboxTabId = hasTabs && (storedTab === "primary" || shownTabs.includes(storedTab)) ? storedTab : "primary";
+  const showTabs = hasTabs && !rawSearch.trim();
+  const query = listQuery(view, info, search, filter, hasTabs ? inboxTabQuery(tab, shownTabs) : "");
   const threadsQuery = useThreads(query);
   const fetched = useMemo(() => threadsQuery.data?.pages.flatMap((p) => p.threads) ?? [], [threadsQuery.data]);
   const firstPage = threadsQuery.data?.pages[0];
@@ -115,7 +135,7 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
 
   // New messages being written sit at the top of their inbox (not while searching or filtering).
   const drafts = useDrafts();
-  const showDrafts = view.kind === "inbox" && !search && filter === "all";
+  const showDrafts = view.kind === "inbox" && tab === "primary" && !search && filter === "all";
   const threads = useMemo(() => {
     if (!showDrafts) return fetched;
     const pending = (drafts.data ?? [])
@@ -294,7 +314,7 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
       </div>
 
       {/* Filter chips, and the search that narrows this view */}
-      <div className="flex shrink-0 items-center gap-1 border-border border-b px-3 pb-2" role="tablist" aria-label="Filter">
+      <div className={cn("flex shrink-0 items-center gap-1 px-3 pb-2", !showTabs && "border-border border-b")} role="tablist" aria-label="Filter">
         {FILTERS.map((f) => (
           <button
             key={f.id}
@@ -333,6 +353,9 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
           </span>
         ) : null}
       </div>
+      {showTabs && info.query !== null ? (
+        <InboxTabs tabs={["primary", ...shownTabs]} shown={shownTabs} active={tab} viewQuery={info.query} />
+      ) : null}
       {queryErrors.length > 0 && threads.length > 0 ? (
         <ul className="shrink-0 space-y-0.5 border-border border-b px-3 py-1.5 text-warning-foreground/90 text-xs">
           {queryErrors.map((error) => (
@@ -450,6 +473,44 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
 }
 
 /** No account yet (a fresh install): what to do first. */
+/** Gmail's inbox tabs. Each one says how many unread conversations it has. */
+function InboxTabs({ tabs, shown, active, viewQuery }: { tabs: InboxTabId[]; shown: InboxTab[]; active: InboxTabId; viewQuery: string }) {
+  return (
+    <div role="tablist" aria-label="Inbox tabs" className="flex shrink-0 items-stretch gap-0.5 border-border border-b px-2">
+      {tabs.map((id) => (
+        <InboxTabButton key={id} id={id} active={id === active} unreadQuery={`${viewQuery} is:unread ${inboxTabQuery(id, shown)}`} />
+      ))}
+    </div>
+  );
+}
+
+function InboxTabButton({ id, active, unreadQuery }: { id: InboxTabId; active: boolean; unreadQuery: string }) {
+  const { label, icon: Icon } = INBOX_TABS[id];
+  const unread = useSearchFacets(unreadQuery).data?.total ?? 0;
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      title={unread > 0 ? `${label}: ${plural(unread, "unread conversation")}` : label}
+      onClick={() => useUi.getState().setInboxTab(id)}
+      className={cn(
+        "relative flex h-9 min-w-0 max-w-44 flex-1 basis-0 cursor-pointer items-center gap-1.5 rounded-t-md px-2 text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+        active ? "font-medium text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+      )}
+    >
+      <Icon className={cn("size-4 shrink-0", active && "text-primary")} />
+      <span className="min-w-0 truncate">{label}</span>
+      {unread > 0 && !active ? (
+        <span className="ms-auto shrink-0 rounded-full bg-primary/15 px-1.5 font-medium text-[11px] text-foreground/85 tabular-nums">
+          {unread >= 1000 ? "999+" : formatCount(unread)}
+        </span>
+      ) : null}
+      {active ? <span aria-hidden className="absolute inset-x-1.5 bottom-0 h-0.5 animate-fade-in rounded-full bg-primary" /> : null}
+    </button>
+  );
+}
+
 function Welcome() {
   return (
     <Empty size="compact" className="h-full animate-fade-in">

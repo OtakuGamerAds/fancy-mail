@@ -7,7 +7,8 @@
  * live messages when it has any (so trashing one message of a conversation does not move the
  * rest), and from all of them when everything is in the trash or spam.
  */
-import type { Address, MailboxRole, ThreadSummary } from "@fancy-mail/contracts";
+import { CATEGORY_VALUES } from "@fancy-mail/contracts";
+import type { Address, CategoryValue, MailboxRole, ThreadSummary } from "@fancy-mail/contracts";
 
 import { chunked, parseJson, placeholders } from "../db/sqlite.ts";
 import type { Db, SqlValue } from "../db/sqlite.ts";
@@ -32,6 +33,7 @@ export interface ThreadRow {
   in_spam: number;
   in_archive: number;
   draft_count: number;
+  category: string | null;
 }
 
 export function toThreadSummary(row: ThreadRow, labelIds: string[]): ThreadSummary {
@@ -52,7 +54,12 @@ export function toThreadSummary(row: ThreadRow, labelIds: string[]): ThreadSumma
     inTrash: row.in_trash === 1,
     inSpam: row.in_spam === 1,
     draftCount: row.draft_count,
+    category: isCategory(row.category) ? row.category : null,
   };
+}
+
+function isCategory(value: string | null): value is CategoryValue {
+  return value !== null && (CATEGORY_VALUES as readonly string[]).includes(value);
 }
 
 interface MsgRow {
@@ -67,6 +74,7 @@ interface MsgRow {
   starred: number;
   is_draft: number;
   has_attachments: number;
+  category: string | null;
 }
 
 interface DraftRow {
@@ -96,7 +104,7 @@ export function refreshThreads(db: Db, threadIds: Iterable<string>): void {
 function refreshSlice(db: Db, ids: string[]): void {
   const marks = placeholders(ids.length);
   const messages = db.all<MsgRow>(
-    `SELECT id, thread_id, account_id, subject, snippet, from_json, date, unread, starred, is_draft, has_attachments
+    `SELECT id, thread_id, account_id, subject, snippet, from_json, date, unread, starred, is_draft, has_attachments, category
        FROM messages WHERE thread_id IN (${marks}) ORDER BY date, seq`,
     ...ids,
   );
@@ -191,6 +199,9 @@ function refreshSlice(db: Db, ids: string[]): void {
         return r.size > 0;
       });
 
+    // Gmail's category: the newest message Gmail sorted (my own replies have none).
+    const category = [...visible].reverse().find((m) => m.category !== null)?.category ?? null;
+
     const labelIds = new Set<string>();
     for (const m of visible) for (const l of labelsByMessage.get(m.id) ?? []) labelIds.add(l);
 
@@ -203,8 +214,8 @@ function refreshSlice(db: Db, ids: string[]): void {
     db.run(
       `INSERT INTO threads (id, account_id, subject, snippet, participants_json, last_message_at, first_message_at,
          message_count, live_count, unread_count, starred, has_attachments, in_inbox, in_sent, in_drafts, in_trash,
-         in_spam, in_archive, draft_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         in_spam, in_archive, draft_count, category)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          account_id = excluded.account_id, subject = excluded.subject, snippet = excluded.snippet,
          participants_json = excluded.participants_json, last_message_at = excluded.last_message_at,
@@ -212,7 +223,7 @@ function refreshSlice(db: Db, ids: string[]): void {
          live_count = excluded.live_count, unread_count = excluded.unread_count, starred = excluded.starred,
          has_attachments = excluded.has_attachments, in_inbox = excluded.in_inbox, in_sent = excluded.in_sent,
          in_drafts = excluded.in_drafts, in_trash = excluded.in_trash, in_spam = excluded.in_spam,
-         in_archive = excluded.in_archive, draft_count = excluded.draft_count`,
+         in_archive = excluded.in_archive, draft_count = excluded.draft_count, category = excluded.category`,
       threadId,
       accountId,
       subject,
@@ -232,6 +243,7 @@ function refreshSlice(db: Db, ids: string[]): void {
       inSpam ? 1 : 0,
       inArchive ? 1 : 0,
       threadDrafts.length,
+      category,
     );
 
     const existing = new Set(

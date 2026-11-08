@@ -179,6 +179,8 @@ for (let i = 0; i < 420; i++) {
     inTrash: i % 37 === 36,
     inSpam: i % 53 === 52,
     draftCount: 0,
+    // Gmail's categories, for the inbox tabs.
+    category: account.provider !== "gmail" ? null : i % 5 === 1 ? "promotions" : i % 7 === 2 ? "social" : i % 11 === 3 ? "forums" : i % 13 === 4 ? "updates" : "primary",
   });
 }
 
@@ -218,6 +220,7 @@ let settings = {
   remoteImages: "ask",
   allowedImageSenders: [],
   closeToTray: true,
+  inboxTabs: ["promotions", "social", "forums"],
   defaultAgentAccess: "draft",
   mcp: { enabled: true, port: 47821 },
   oauth: { googleClientId: "", googleClientSecret: "", microsoftClientId: "" },
@@ -281,6 +284,9 @@ function matches(t, allTerms) {
         break;
       case "has":
         ok = t.hasAttachments;
+        break;
+      case "category":
+        ok = term.value === "primary" ? t.category === null || t.category === "primary" : t.category === term.value;
         break;
       case "label": {
         const l = labels.find((x) => x.id === term.value || x.name.toLowerCase() === term.value.toLowerCase());

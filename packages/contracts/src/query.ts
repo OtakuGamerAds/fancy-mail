@@ -20,6 +20,10 @@ export type InValue = (typeof IN_VALUES)[number];
 export const IS_VALUES = ["unread", "read", "starred", "unstarred", "draft"] as const;
 export type IsValue = (typeof IS_VALUES)[number];
 
+/** Gmail's inbox categories. Mail from other providers, and Gmail mail not sorted yet, is primary. */
+export const CATEGORY_VALUES = ["primary", "promotions", "social", "updates", "forums"] as const;
+export type CategoryValue = (typeof CATEGORY_VALUES)[number];
+
 export const FIELD_KEYS = ["from", "to", "cc", "subject", "filename"] as const;
 export type FieldKey = (typeof FIELD_KEYS)[number];
 
@@ -30,6 +34,8 @@ export type QueryTerm =
   | { kind: "is"; value: IsValue; negated: boolean }
   | { kind: "has"; value: "attachment"; negated: boolean }
   | { kind: "in"; value: InValue; negated: boolean }
+  /** Gmail's inbox category of the conversation. */
+  | { kind: "category"; value: CategoryValue; negated: boolean }
   /** A label name or id; "none" means conversations without any label. */
   | { kind: "label"; value: string; negated: boolean }
   /** An account email, display name or id. */
@@ -177,6 +183,13 @@ export function parseQuery(input: string, now: number = Date.now()): ParsedQuery
           errors.push(`Unknown in:${value}. Use one of: ${IN_VALUES.map((v) => `in:${v}`).join(", ")}.`);
         }
         break;
+      case "category":
+        if ((CATEGORY_VALUES as readonly string[]).includes(lower)) {
+          terms.push({ kind: "category", value: lower as CategoryValue, negated });
+        } else {
+          errors.push(`Unknown category:${value}. Use one of: ${CATEGORY_VALUES.map((v) => `category:${v}`).join(", ")}.`);
+        }
+        break;
       case "label":
         terms.push({ kind: "label", value, negated });
         break;
@@ -250,6 +263,7 @@ export const QUERY_SYNTAX_HELP = [
   "in:inbox in:sent in:drafts in:archive in:starred in:trash in:spam in:anywhere",
   "  (without in:, everything except trash and spam is searched)",
   "label:Invoices label:none · account:me@gmail.com · group:Banking group:none",
+  "category:primary category:promotions category:social category:updates category:forums (Gmail's inbox tabs)",
   "after:2026-07-01 before:2026-10-01 · newer_than:7d older_than:1y (d days, w weeks, m months, y years) · larger:5M smaller:100K",
   "Put - before any term to exclude it: -label:Newsletters -from:noreply",
   "All terms must match; there is no OR — run one search per alternative.",

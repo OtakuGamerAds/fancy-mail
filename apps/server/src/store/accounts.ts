@@ -152,10 +152,17 @@ export function createAccountsStore(db: Db) {
       return db.value<number>("SELECT is_demo FROM accounts WHERE id = ?", id) === 1;
     },
 
-    /** Unread conversations in each account's inbox. */
-    unreadInboxCounts(): Map<string, number> {
+    /**
+     * Unread conversations in each account's inbox. Gmail's categories shown as tabs are left
+     * out, as Gmail counts only Primary.
+     */
+    unreadInboxCounts(tabs: readonly string[] = []): Map<string, number> {
       const rows = db.all<{ account_id: string; n: number }>(
-        "SELECT account_id, COUNT(*) AS n FROM threads WHERE in_inbox = 1 AND unread_count > 0 GROUP BY account_id",
+        `SELECT account_id, COUNT(*) AS n FROM threads
+          WHERE in_inbox = 1 AND unread_count > 0
+            ${tabs.length > 0 ? `AND (category IS NULL OR category NOT IN (${tabs.map(() => "?").join(", ")}))` : ""}
+          GROUP BY account_id`,
+        ...tabs,
       );
       return new Map(rows.map((r) => [r.account_id, r.n]));
     },

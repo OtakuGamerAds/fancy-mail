@@ -69,6 +69,25 @@ export function createSyncStore(db: Db, store: Store) {
       return out;
     },
 
+    /** The account's messages in its inbox, with the category they have now. */
+    inboxCategories(accountId: string): { id: string; threadId: string; category: string | null }[] {
+      return db.all<{ id: string; threadId: string; category: string | null }>(
+        `SELECT DISTINCT m.id AS id, m.thread_id AS threadId, m.category AS category
+           FROM messages m
+           JOIN message_mailboxes mm ON mm.message_id = m.id
+           JOIN mailboxes b ON b.id = mm.mailbox_id
+          WHERE m.account_id = ? AND b.account_id = ? AND b.role = 'inbox'`,
+        accountId,
+        accountId,
+      );
+    },
+
+    setCategories(changes: { id: string; category: string }[]): void {
+      db.tx(() => {
+        for (const c of changes) db.run("UPDATE messages SET category = ? WHERE id = ?", c.category, c.id);
+      });
+    },
+
     /** The newest known uids of a mailbox (for flag checks on servers without CONDSTORE). */
     newestUids(mailboxId: string, limit: number): number[] {
       return db

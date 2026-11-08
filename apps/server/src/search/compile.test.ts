@@ -115,6 +115,28 @@ describe("compileQuery", () => {
     expect(found("in:archive")).toEqual([]); // sent-only conversations are not "archived"
   });
 
+  it("sorts by Gmail's categories; mail Gmail didn't sort is Primary", () => {
+    const { db } = stack.services.env;
+    db.run("UPDATE messages SET category = 'promotions' WHERE thread_id = ?", ids.newsletter!);
+    db.run("UPDATE messages SET category = 'primary' WHERE thread_id = ?", ids.invoice!);
+    stack.store.refreshThreads([ids.newsletter!, ids.invoice!]);
+    expect(found("in:inbox category:promotions")).toEqual([ids.newsletter]);
+    expect(found("in:inbox category:primary")).toEqual([ids.invoice!]);
+    // Primary with Promotions as a tab: everything the tabs don't take, other providers' mail too.
+    expect(found("-category:promotions -category:social").sort()).toEqual([ids.invoice, ids.sent].sort());
+    expect(search("in:inbox category:promotions").threads[0]!.category).toBe("promotions");
+    expect(search(`thread:${ids.sent}`).threads[0]!.category).toBeNull();
+  });
+
+  it("counts only Primary in the inbox's unread count when categories are tabs", () => {
+    const { db } = stack.services.env;
+    expect(stack.store.accounts.unreadInboxCounts(["promotions"]).get(work.accountId)).toBe(1);
+    db.run("UPDATE messages SET category = 'promotions' WHERE thread_id = ?", ids.invoice!);
+    stack.store.refreshThreads([ids.invoice!]);
+    expect(stack.store.accounts.unreadInboxCounts(["promotions"]).get(work.accountId)).toBeUndefined();
+    expect(stack.store.accounts.unreadInboxCounts([]).get(work.accountId)).toBe(1);
+  });
+
   it("ORs several thread: terms", () => {
     expect(found(`thread:${ids.invoice} thread:${ids.sent}`).sort()).toEqual([ids.invoice, ids.sent].sort());
   });

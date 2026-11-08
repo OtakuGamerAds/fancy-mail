@@ -66,7 +66,7 @@ export function createAccountsService(env: ServiceEnv, settings: () => { default
 
   const service = {
     list(ctx?: CallContext): Account[] {
-      const unread = store.accounts.unreadInboxCounts();
+      const unread = store.accounts.unreadInboxCounts(store.settings.get().inboxTabs);
       const all = store.accounts.list();
       const visible = ctx ? visibleAccountIds(ctx, all) : null;
       const groupOrder = new Map(store.groups.list().map((g, i) => [g.id, i]));
@@ -81,7 +81,7 @@ export function createAccountsService(env: ServiceEnv, settings: () => { default
     },
 
     get(id: string, ctx?: CallContext): Account {
-      return toAccount(requireAccount(id, ctx), store.accounts.unreadInboxCounts());
+      return toAccount(requireAccount(id, ctx), store.accounts.unreadInboxCounts(store.settings.get().inboxTabs));
     },
 
     /** The stored record (with username, paused, isDemo) for the sync engine. */
@@ -98,7 +98,7 @@ export function createAccountsService(env: ServiceEnv, settings: () => { default
         all.find((a) => a.email.toLocaleLowerCase() === wanted) ??
         all.find((a) => a.displayName.toLocaleLowerCase() === wanted) ??
         null;
-      return found ? toAccount(found, store.accounts.unreadInboxCounts()) : null;
+      return found ? toAccount(found, store.accounts.unreadInboxCounts(store.settings.get().inboxTabs)) : null;
     },
 
     detect(email: string): ProviderDetection {

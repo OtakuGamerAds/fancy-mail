@@ -10,6 +10,7 @@
   "routes": [
     { "name": "inbox", "hash": "#/inbox" },
     { "name": "unread", "hash": "#/unread" },
+    { "name": "inbox-promotions", "hash": "#/inbox", "click": "[aria-label='Inbox tabs'] [role=tab]:nth-child(2)" },
     { "name": "group-banking", "hash": "#/g/{group:Banking}/inbox" },
     { "name": "account-inbox", "hash": "#/a/{account:billing@brightwave.example}/inbox" },
     { "name": "label-invoices", "hash": "#/label/{label:Invoices}" },

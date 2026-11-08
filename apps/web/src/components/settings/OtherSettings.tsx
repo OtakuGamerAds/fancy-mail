@@ -1,4 +1,5 @@
 /** Settings › Reading, Sign in with Google / Microsoft, Data, About. */
+import { INBOX_TABS, type InboxTab } from "@fancy-mail/contracts";
 import { ExternalLinkIcon, FolderOpenIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -18,6 +19,13 @@ import { copyText } from "./AgentsSettings";
 import { SettingsRow, SettingsSection } from "./layout";
 
 const REPO_URL = "https://github.com/OtakuGamerAds/fancy-mail";
+
+const TAB_NAMES: Record<InboxTab, { title: string; description: string }> = {
+  promotions: { title: "Promotions", description: "Deals, offers and marketing mail." },
+  social: { title: "Social", description: "Social networks and media sites." },
+  updates: { title: "Updates", description: "Receipts, bills, confirmations and statements." },
+  forums: { title: "Forums", description: "Mailing lists, groups and discussion boards." },
+};
 
 // ── Reading ─────────────────────────────────────────────────────────────────────────────────
 
@@ -92,6 +100,29 @@ export function ReadingSettings() {
             }
           />
         ) : null}
+      </SettingsSection>
+      <SettingsSection
+        title="Inbox tabs"
+        description="Gmail sorts your inbox into categories. Turn on the same tabs you have in Gmail; mail of the ones that are off stays in Primary, and only Primary mail notifies."
+      >
+        {INBOX_TABS.map((tab) => (
+          <SettingsRow
+            key={tab}
+            title={TAB_NAMES[tab].title}
+            description={TAB_NAMES[tab].description}
+            control={
+              <Switch
+                checked={settings.inboxTabs.includes(tab)}
+                onCheckedChange={(on) =>
+                  void updateSettings({
+                    inboxTabs: INBOX_TABS.filter((t) => (t === tab ? on : settings.inboxTabs.includes(t))),
+                  })
+                }
+                aria-label={`${TAB_NAMES[tab].title} tab`}
+              />
+            }
+          />
+        ))}
       </SettingsSection>
       <SettingsSection title="Senders whose images always show" description="Added with “Always for …” above a message.">
         {settings.allowedImageSenders.length === 0 ? (

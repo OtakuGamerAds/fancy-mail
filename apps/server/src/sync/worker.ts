@@ -16,7 +16,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 
-import type { AccountStatus, AccountSyncState, MailboxRole, Settings } from "@fancy-mail/contracts";
+import type { AccountStatus, AccountSyncState, CategoryValue, MailboxRole, Settings } from "@fancy-mail/contracts";
 import type { FetchMessageObject, FetchQueryObject, ImapFlow, MailboxObject } from "imapflow";
 
 import type { ServerConfig } from "../config.ts";
@@ -48,6 +48,8 @@ import { ThreadIndex } from "./threading.ts";
 import type { ThreadCandidate } from "./threading.ts";
 
 const BATCH = 250;
+/** Gmail's categories besides Primary (what's in none of them is Primary). */
+const GMAIL_CATEGORIES: readonly CategoryValue[] = ["promotions", "social", "updates", "forums"];
 const PASS_INTERVAL_MS = 3 * 60_000;
 const IDLE_DEBOUNCE_MS = 2_000;
 const UID_CHECK_EVERY = 5;
@@ -709,6 +711,7 @@ export class AccountWorker {
       }
       this.#cleanupOrphans();
       this.#flush(ctx);
+      await this.#syncCategories(client);
       this.#saveSyncInfo({ initialDone: true, lastPassAt: Date.now() });
       this.#queuePrefetch();
     } finally {
@@ -781,10 +784,17 @@ export class AccountWorker {
     }
     this.#cleanupOrphans();
     this.#flush(ctx);
+    await this.#syncCategories(client);
     if (ctx.newMessages.length > 0) this.#log.info("new mail", { messages: ctx.newMessages.length, newInInbox: ctx.newInbox.size });
     if (ctx.newInbox.size > 0) {
-      const threadIds = [...new Set(this.#deps.store.messages.byIds([...ctx.newInbox]).map((m) => m.threadId))];
-      this.#deps.bus.publish({ type: "newMail", accountId: this.accountId, threadIds, count: ctx.newInbox.size });
+      // As in Gmail, only mail that lands in Primary notifies; Promotions and the others wait.
+      const tabs = new Set<string>(this.#deps.settings().inboxTabs);
+      const messages = this.#deps.store.messages.byIds([...ctx.newInbox]);
+      const primary = new Set(
+        this.#deps.store.threads.byIds([...new Set(messages.map((m) => m.threadId))]).filter((t) => !tabs.has(t.category ?? "primary")).map((t) => t.id),
+      );
+      const fresh = messages.filter((m) => primary.has(m.threadId));
+      if (fresh.length > 0) this.#deps.bus.publish({ type: "newMail", accountId: this.accountId, threadIds: [...primary], count: fresh.length });
     }
     if (ctx.newMessages.length > 0) this.#queuePrefetch(ctx.newMessages);
     this.#saveSyncInfo({ lastPassAt: Date.now() });
@@ -888,6 +898,54 @@ export class AccountWorker {
       lock.release();
     }
     if (resync) await this.#syncMailbox(client, mailbox, ctx);
+  }
+
+  /**
+   * Gmail: which inbox messages are in Promotions, Social, Updates or Forums. IMAP doesn't carry
+   * the categories in X-GM-LABELS, but Gmail's own search (X-GM-RAW) knows them: one search per
+   * category over the inbox, every pass (moving mail between tabs in Gmail changes no flag).
+   * The rest of the inbox is Primary.
+   */
+  async #syncCategories(client: ImapFlow): Promise<void> {
+    if (!this.#gmail) return;
+    const all = this.#deps.store.mailboxes.list(this.accountId).find((m) => m.role === "all");
+    if (!all) return;
+    const found = new Map<number, CategoryValue>();
+    try {
+      const lock = await client.getMailboxLock(all.path);
+      try {
+        for (const category of GMAIL_CATEGORIES) {
+          const uids = await client.search({ gmraw: `in:inbox category:${category}` }, { uid: true });
+          if (!Array.isArray(uids)) return; // the search failed: keep what we have
+          for (const uid of uids) if (!found.has(uid)) found.set(uid, category);
+        }
+      } finally {
+        lock.release();
+      }
+    } catch (error) {
+      if (isNetworkError(error)) throw error;
+      this.#log.warn("couldn't read Gmail's inbox categories", { error: error instanceof Error ? error.message : String(error) });
+      return;
+    }
+    const byMessage = new Map<string, CategoryValue>();
+    const uidMap = this.#deps.syncStore.uidMap(all.id);
+    for (const [uid, category] of found) {
+      const messageId = uidMap.get(uid);
+      if (messageId) byMessage.set(messageId, category);
+    }
+    const changes: { id: string; category: string }[] = [];
+    const threadIds = new Set<string>();
+    for (const m of this.#deps.syncStore.inboxCategories(this.accountId)) {
+      const category = byMessage.get(m.id) ?? "primary";
+      if (m.category === category) continue;
+      changes.push({ id: m.id, category });
+      threadIds.add(m.threadId);
+    }
+    if (changes.length === 0) return;
+    this.#deps.syncStore.setCategories(changes);
+    this.#deps.store.refreshThreads(threadIds);
+    // The tabs and the inbox counts (only Primary counts).
+    this.#deps.bus.publish({ type: "invalidate", topics: ["threads", "accounts", "groups"] });
   }
 
   /**

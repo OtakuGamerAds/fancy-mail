@@ -31,6 +31,15 @@ describe("parseQuery", () => {
     ]);
   });
 
+  it("reads Gmail's categories and explains unknown ones", () => {
+    const { terms, errors } = parseQuery("category:Promotions -category:social category:important", now);
+    expect(terms).toEqual([
+      { kind: "category", value: "promotions", negated: false },
+      { kind: "category", value: "social", negated: true },
+    ]);
+    expect(errors).toEqual(["Unknown category:important. Use one of: category:primary, category:promotions, category:social, category:updates, category:forums."]);
+  });
+
   it("refuses OR and parentheses instead of searching for the word", () => {
     const { terms, errors } = parseQuery("(from:a.example OR from:b.example)", now);
     expect(terms.map((t) => t.kind)).toEqual(["field", "field"]);

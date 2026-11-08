@@ -257,6 +257,17 @@ const DEMO_GROUPS_KEY = "demo.groupIds";
 const DEMO_LABELS_KEY = "demo.labelIds";
 
 /** Seeds the demo accounts. Labels and groups are reused by name when they exist. */
+/** The Gmail category a kind of demo conversation lands in (the rest is Primary). */
+const DEMO_CATEGORIES: Record<string, string> = {
+  newsletter: "promotions",
+  platform: "social",
+  shipping: "updates",
+  receipt: "updates",
+  utility: "updates",
+  statement: "updates",
+  invite: "forums",
+};
+
 export function seedDemo(env: ServiceEnv, options: SeedOptions = {}): SeedSummary {
   const now = options.now ?? env.now();
   const rng = content.createRng(options.seed ?? 20261108);
@@ -493,6 +504,10 @@ export function seedDemo(env: ServiceEnv, options: SeedOptions = {}): SeedSummar
             locations.push({ box: folder("Rechnungen 2025"), uid: true });
           } else locations.push({ box: boxes.get("archive") ?? inbox, uid: true });
           for (const loc of locations) store.messages.addLocation(messageId, loc.box.id, loc.uid ? nextUid(loc.box.id) : null);
+          // Gmail sorts its inbox into categories (the inbox tabs).
+          if (spec.style === "gmail" && !m.fromMe && finalPlace === "inbox") {
+            env.db.run("UPDATE messages SET category = ? WHERE id = ?", DEMO_CATEGORIES[thread.kind] ?? "primary", messageId);
+          }
           if (finalPlace === "trash" || finalPlace === "spam") {
             const back = spec.style === "gmail" ? [boxes.get("all")!.id, ...(m.fromMe ? [] : [inbox.id])] : [m.fromMe ? boxes.get("sent")!.id : inbox.id];
             store.messages.update(messageId, { restoreTo: back });

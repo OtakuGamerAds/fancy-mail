@@ -4,6 +4,8 @@
  */
 import { z } from "zod";
 
+import { CATEGORY_VALUES } from "./query.ts";
+
 // ── Agent access ────────────────────────────────────────────────────────────────────────────
 //
 // How much an AI agent (connected over MCP) may do with one account. Levels are ordered: each
@@ -161,6 +163,8 @@ export const ThreadSummary = z.object({
   inTrash: z.boolean(),
   inSpam: z.boolean(),
   draftCount: z.number().int(),
+  /** Gmail's inbox category (Promotions, Social, …); null for other providers' mail. */
+  category: z.enum(CATEGORY_VALUES).nullable(),
 });
 export type ThreadSummary = z.infer<typeof ThreadSummary>;
 
@@ -292,6 +296,10 @@ export type Activity = z.infer<typeof Activity>;
 
 // ── Settings ────────────────────────────────────────────────────────────────────────────────
 
+/** The inbox tabs besides Primary, in Gmail's order. */
+export const INBOX_TABS = ["promotions", "social", "updates", "forums"] as const;
+export type InboxTab = (typeof INBOX_TABS)[number];
+
 export const Settings = z.object({
   readingPane: z.enum(["right", "off"]),
   density: z.enum(["comfortable", "compact"]),
@@ -299,6 +307,8 @@ export const Settings = z.object({
   remoteImages: z.enum(["ask", "always"]),
   allowedImageSenders: z.array(z.string()),
   closeToTray: z.boolean(),
+  /** Gmail's inbox tabs shown above the inbox; mail of the others stays in Primary (as in Gmail). */
+  inboxTabs: z.array(z.enum(INBOX_TABS)),
   /** What new accounts get. Each account has its own level after that. */
   defaultAgentAccess: AgentAccess,
   mcp: z.object({
@@ -325,6 +335,7 @@ export const DEFAULT_SETTINGS: Settings = {
   remoteImages: "ask",
   allowedImageSenders: [],
   closeToTray: true,
+  inboxTabs: ["promotions", "social"],
   defaultAgentAccess: "draft",
   mcp: { enabled: true, port: 47821 },
   oauth: { googleClientId: "", googleClientSecret: "", microsoftClientId: "" },

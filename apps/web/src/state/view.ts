@@ -2,11 +2,11 @@
  * What the current view is called and which query it runs. A view is a query (contracts'
  * viewQuery); the sidebar's search and the filter chip are added to it.
  */
-import { VIEW_TITLES, scopeQuery, viewQuery, type Bootstrap, type ViewScope } from "@fancy-mail/contracts";
+import { VIEW_TITLES, scopeQuery, viewQuery, type Bootstrap, type InboxTab, type ViewScope } from "@fancy-mail/contracts";
 
 import { directoryOf } from "./queries";
 import { toMailView, viewScope, type ViewRef } from "./router";
-import type { ListFilter } from "./ui";
+import type { InboxTabId, ListFilter } from "./ui";
 
 export interface ViewInfo {
   title: string;
@@ -88,11 +88,20 @@ export function describeView(view: ViewRef, bootstrap: Bootstrap | undefined): V
  * The list's query. A search from an inbox looks through all the mail of that scope (archived
  * mail included, as a search should); any other view (Sent, a label, a folder) is narrowed.
  */
-export function listQuery(view: ViewRef, info: ViewInfo, search: string, filter: ListFilter): string | null {
+export function listQuery(view: ViewRef, info: ViewInfo, search: string, filter: ListFilter, tab: string = ""): string | null {
   if (info.query === null) return null;
   const text = search.trim();
   const base = text && searchWidens(view) ? scopeQuery(info.scope) : info.query;
-  return [base, text, FILTER_QUERY[filter]].filter(Boolean).join(" ");
+  return [base, text ? "" : tab, text, FILTER_QUERY[filter]].filter(Boolean).join(" ");
+}
+
+/**
+ * An inbox tab's part of the query. Primary is what no shown tab takes: with Updates hidden,
+ * updates stay in Primary, as in Gmail.
+ */
+export function inboxTabQuery(tab: InboxTabId, shown: readonly InboxTab[]): string {
+  if (tab === "primary") return shown.map((t) => `-category:${t}`).join(" ");
+  return `category:${tab}`;
 }
 
 /** Searching from this view looks through all mail in its scope. */

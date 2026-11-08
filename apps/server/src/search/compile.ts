@@ -150,6 +150,11 @@ export function compileQuery(parsed: ParsedQuery, lookups: CompileLookups, optio
         addTerm(term.negated, sql);
         break;
       }
+      case "category":
+        // Mail Gmail didn't sort (other providers, not asked yet) is primary.
+        if (term.value === "primary") addTerm(term.negated, "(t.category IS NULL OR t.category = 'primary')");
+        else addTerm(term.negated, "t.category IS ?", term.value);
+        break;
       case "label": {
         const value = lower(term.value);
         if (value === "none") {

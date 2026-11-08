@@ -20,7 +20,7 @@ export function createGroupsService(env: ServiceEnv) {
   const { store } = env;
 
   function unreadByGroup(): Map<string, number> {
-    const unread = store.accounts.unreadInboxCounts();
+    const unread = store.accounts.unreadInboxCounts(store.settings.get().inboxTabs);
     const out = new Map<string, number>();
     for (const a of store.accounts.list()) {
       if (!a.groupId) continue;

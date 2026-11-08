@@ -289,6 +289,18 @@ export const MIGRATIONS: Migration[] = [
       db.exec("CREATE INDEX messages_unread ON messages(id) WHERE unread = 1");
     },
   },
+  {
+    version: 3,
+    name: "Gmail inbox categories",
+    up: (db) => {
+      // messages.category: what Gmail says for a message in the inbox (null: not Gmail, or not
+      // asked yet). threads.category: the newest categorized message's, for the inbox tabs.
+      db.exec(`
+        ALTER TABLE messages ADD COLUMN category TEXT;
+        ALTER TABLE threads ADD COLUMN category TEXT;
+      `);
+    },
+  },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
