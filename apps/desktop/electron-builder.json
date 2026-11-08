@@ -1,0 +1,40 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.otakugamer.fancymail",
+  "productName": "Fancy Mail",
+  "copyright": "Copyright © 2026 OtakuGamerAds",
+  "electronVersion": "44.10.2",
+  "electronDist": "../../node_modules/electron/dist",
+  "npmRebuild": false,
+  "asar": true,
+  "directories": {
+    "output": "../../release",
+    "buildResources": "build"
+  },
+  "files": ["package.json", "dist/main.cjs", "dist/preload.cjs", "build/icon.png"],
+  "extraResources": [
+    { "from": "../web/dist", "to": "web" },
+    { "from": "dist/server", "to": "server", "filter": ["**/*", "!**/*.map"] }
+  ],
+  "artifactName": "Fancy-Mail-Setup-${version}.${ext}",
+  "win": {
+    "target": ["nsis"],
+    "icon": "build/icon.ico"
+  },
+  "nsis": {
+    "oneClick": true,
+    "perMachine": false,
+    "differentialPackage": true,
+    "deleteAppDataOnUninstall": false,
+    "shortcutName": "Fancy Mail",
+    "uninstallDisplayName": "Fancy Mail"
+  },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "OtakuGamerAds",
+      "repo": "fancy-mail",
+      "releaseType": "release"
+    }
+  ]
+}

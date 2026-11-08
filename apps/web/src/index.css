@@ -1,0 +1,380 @@
+/*
+ * Theme tokens copied from T3 Code's apps/web/src/index.css (dark theme only), by way of
+ * Fancy Dictator's adaptation. MIT License — see THIRD_PARTY_LICENSE_T3CODE.txt.
+ */
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark, .dark *));
+/* Window Controls Overlay: the native min/max/close are drawn over the top right. */
+@custom-variant wco (&:is(.wco, .wco *));
+
+@theme {
+  /* A desktop window, however narrow: T3's components use their desktop sizes from `sm:` up. */
+  --breakpoint-sm: 0px;
+  --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --animate-skeleton: skeleton 2.4s infinite;
+
+  @keyframes skeleton {
+    /* T3's single loading breath, stepped so the compositor draws few frames. */
+    0%,
+    42% {
+      opacity: 1;
+      animation-timing-function: steps(4);
+    }
+    50%,
+    92% {
+      opacity: 0.55;
+      animation-timing-function: steps(4);
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-placeholder: var(--placeholder);
+  --color-secondary-label: var(--secondary-label);
+  --color-message: var(--message-surface);
+  --color-update: var(--update);
+  --color-update-foreground: var(--update-foreground);
+  --color-icon-muted: var(--icon-muted);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-error: var(--error);
+  --color-error-foreground: var(--error-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-surface: var(--warning-surface);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-sidebar-control-surface: var(--sidebar-control-surface);
+  --color-sidebar-row-hover: var(--sidebar-row-hover);
+  --color-sidebar-row-active: var(--sidebar-row-active);
+  --color-sidebar-row-selected: var(--sidebar-row-selected);
+  --color-sidebar-border: var(--sidebar-border);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  /* T3 Code's dense UI sizes. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: calc(1 / 0.6875);
+  --text-3xs: 0.625rem;
+  --text-3xs--line-height: calc(0.875 / 0.625);
+  --text-4xs: 0.5rem;
+  --text-4xs--line-height: 1;
+  --text-5xs: 0.4375rem;
+  --text-5xs--line-height: 1;
+}
+
+:root {
+  color-scheme: dark;
+  --radius: 0.5rem;
+  --control-radius: 0.5rem;
+
+  /* T3 Code dark theme. */
+  --background: #000;
+  --foreground: oklch(0.97 0 0);
+  --card: color-mix(in srgb, oklch(0.145 0 0) 97%, #fff);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: color-mix(in srgb, oklch(0.145 0 0) 97%, #fff);
+  --popover-foreground: oklch(0.97 0 0);
+  --primary: oklch(0.571 0.21 264);
+  --primary-foreground: #fff;
+  --secondary: rgb(255 255 255 / 3%);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: rgb(255 255 255 / 3%);
+  --muted-foreground: oklch(0.708 0 0);
+  --placeholder: color-mix(in srgb, var(--muted-foreground) 80%, transparent);
+  /* A user turn in T3 Code's timeline: the message cards in the reader. */
+  --message-surface: color-mix(in srgb, oklch(0.145 0 0) 92%, #fff);
+  --secondary-label: var(--muted-foreground);
+  --icon-muted: var(--muted-foreground);
+  --accent: rgb(255 255 255 / 4%);
+  --accent-foreground: oklch(0.97 0 0);
+  --error: color-mix(in srgb, oklch(0.637 0.237 25.331) 90%, #fff);
+  --error-foreground: oklch(0.704 0.191 22.216);
+  --destructive: var(--error);
+  --destructive-foreground: var(--error-foreground);
+  --success: oklch(0.696 0.17 162.48);
+  --success-foreground: oklch(0.765 0.177 163.223);
+  --info: oklch(0.623 0.214 259.815);
+  --info-foreground: oklch(0.707 0.165 254.624);
+  --warning: oklch(0.769 0.188 70.08);
+  --warning-foreground: oklch(0.828 0.189 84.429);
+  --warning-surface: color-mix(in srgb, var(--warning) 16%, transparent);
+  --border: rgb(255 255 255 / 8%);
+  --input: rgb(255 255 255 / 11%);
+  --ring: var(--primary);
+  --update: var(--primary);
+  --update-foreground: oklch(0.707 0.165 254.624);
+
+  /* T3's sidebar, dark: the card tone with quiet row states. */
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-muted-foreground: var(--muted-foreground);
+  --sidebar-control-surface: var(--muted);
+  --sidebar-row-hover: color-mix(in srgb, #fff 8%, transparent);
+  --sidebar-row-active: color-mix(in srgb, #fff 11%, transparent);
+  --sidebar-row-selected: color-mix(in srgb, #fff 7%, transparent);
+  --sidebar-border: var(--border);
+  --sidebar-content-inset: 0.5rem;
+  --sidebar-control-gap: 0.5rem;
+  --sidebar-row-content-inset: 0.625rem;
+  --sidebar-icon-color: color-mix(in srgb, var(--sidebar-muted-foreground) 85%, var(--sidebar));
+
+  /* T3 layout values its primitives reference. */
+  --z-sheet: 46;
+  --command-shell-inset: 0.5rem;
+  --command-content-inset: 1rem;
+  --thread-details-panel-width: 17.5rem;
+  --native-titlebar-height: 0px;
+  --wco-inset: 0px;
+  --wco-height: 0px;
+
+  /* T3 Code's appearance-contrast aliases, referenced by its UI primitives. */
+  --contrast-muted-foreground: var(--muted-foreground);
+  --contrast-border: var(--border);
+  --contrast-input: var(--input);
+  --contrast-foreground: var(--foreground);
+
+  /* Glass for popups (T3 Code, dark theme). */
+  --glass-opacity: 80%;
+  --glass-blur: 16px;
+  --glass-saturation: 1.08;
+
+  /* The composer surface (T3's ComposerSurface), dark theme. */
+  --composer-outline: color-mix(in srgb, #fff 5%, transparent);
+  --composer-highlight: rgb(255 255 255 / 3%);
+
+  --app-scrollbar-width: 6px;
+  --app-scrollbar-thumb: rgb(255 255 255 / 10%);
+  --app-scrollbar-thumb-hover: rgb(255 255 255 / 16%);
+
+  /* The header strips line up across the three columns. */
+  --header-height: 52px;
+}
+
+.wco {
+  --native-titlebar-height: var(--wco-height);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  :where(svg.lucide[stroke-width="2"]) {
+    stroke-width: 1.75;
+  }
+
+  html,
+  body,
+  #root {
+    margin: 0;
+    height: 100%;
+    background: var(--background);
+    overflow: hidden;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11", "ss01";
+    font-size: 14px;
+    user-select: none;
+  }
+
+  input,
+  textarea,
+  [contenteditable],
+  [data-selectable],
+  [data-selectable] * {
+    user-select: text;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 45%, transparent);
+  }
+}
+
+/* The header strips are the window's title bar: drag them; their controls stay clickable. */
+@utility app-drag {
+  -webkit-app-region: drag;
+}
+@utility app-no-drag {
+  -webkit-app-region: no-drag;
+}
+[data-drag-region] button,
+[data-drag-region] input,
+[data-drag-region] a,
+[data-drag-region] [role="button"],
+[data-drag-region] [role="checkbox"],
+[data-drag-region] [data-no-drag] {
+  -webkit-app-region: no-drag;
+}
+
+/* T3 Code: lists that scroll fade at their edges while the scrollbar lane stays opaque. */
+@utility virtualized-scroll-fade {
+  -webkit-mask-image: var(--virtualized-scroll-fade-mask), linear-gradient(black, black);
+  mask-image: var(--virtualized-scroll-fade-mask), linear-gradient(black, black);
+  -webkit-mask-position: left, right;
+  mask-position: left, right;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size:
+    calc(100% - var(--app-scrollbar-width)) 100%,
+    var(--app-scrollbar-width) 100%;
+  mask-size:
+    calc(100% - var(--app-scrollbar-width)) 100%,
+    var(--app-scrollbar-width) 100%;
+}
+
+/* Dropdown surface used by T3 Code's Select and Menu popups. */
+@utility dropdown-glass {
+  background: color-mix(
+    in srgb,
+    var(--popover) 18%,
+    color-mix(in srgb, var(--popover) var(--glass-opacity), transparent)
+  );
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  border: 1px solid color-mix(in srgb, var(--contrast-foreground) 10%, transparent);
+
+  @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    background: var(--popover) !important;
+  }
+}
+
+/* T3 Code's glass surface (its "glass" button, the reconnect pill). */
+@utility surface-glass {
+  background: color-mix(in srgb, var(--background) var(--glass-opacity), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+
+  @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    background: var(--background) !important;
+  }
+}
+
+@utility dialog-glass {
+  background: color-mix(in srgb, var(--background) var(--glass-opacity), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  border-color: color-mix(in srgb, #fff 8%, transparent);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 4%),
+    0 24px 72px -20px rgb(0 0 0 / 90%);
+
+  @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    background: var(--popover) !important;
+  }
+}
+
+@utility dialog-backdrop {
+  background: color-mix(in srgb, var(--background) 64%, transparent);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+/* Long dropdowns scroll with the wheel or the scrollbar. Base UI's scroll arrows scroll on
+   hover, which is too easy to trigger by accident, so they are hidden. */
+[data-slot="select-scroll-up-arrow"],
+[data-slot="select-scroll-down-arrow"] {
+  display: none;
+}
+[data-slot="select-list"].base-ui-disable-scrollbar {
+  scrollbar-width: auto !important;
+}
+[data-slot="select-list"].base-ui-disable-scrollbar::-webkit-scrollbar {
+  display: block !important;
+}
+
+/* Scrollbar styling (T3 Code). Scrollable lists always show where they are. */
+::-webkit-scrollbar {
+  width: var(--app-scrollbar-width);
+  height: var(--app-scrollbar-width);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--app-scrollbar-thumb);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--app-scrollbar-thumb-hover);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* The resize handles between the columns: a 2px line on hover, like T3's sidebar rail. */
+.col-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  margin-left: -4px;
+  z-index: 20;
+  cursor: col-resize;
+  -webkit-app-region: no-drag;
+}
+.col-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: transparent;
+  transition: background-color 120ms;
+}
+.col-resizer:hover::after,
+.col-resizer[data-dragging]::after {
+  width: 2px;
+  left: 3.5px;
+  background: color-mix(in srgb, #fff 18%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

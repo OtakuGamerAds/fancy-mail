@@ -1,0 +1,30 @@
+{
+  "$comment": [
+    "The views `pnpm snapshot` renders to snapshots/latest/<name>.png, in this order.",
+    "Placeholders are resolved against the demo data before the capture (scripts/snapshot.mjs):",
+    "  {group:Name} {label:Name} {account:email|first}  ids from app.bootstrap (names ignore case)",
+    "  {thread:query || another query}                   the first conversation threads.search finds",
+    "  {agentDraftThread}                                 the conversation with a draft an agent wrote",
+    "`click` is a CSS selector clicked once the view has settled (before the capture)."
+  ],
+  "routes": [
+    { "name": "inbox", "hash": "#/inbox" },
+    { "name": "unread", "hash": "#/unread" },
+    { "name": "group-banking", "hash": "#/g/{group:Banking}/inbox" },
+    { "name": "account-inbox", "hash": "#/a/{account:studio@brightwave.example}/inbox" },
+    { "name": "label-invoices", "hash": "#/label/{label:Invoices}" },
+    {
+      "name": "thread-html",
+      "hash": "#/label/{label:Newsletters}/t/{thread:label:Newsletters in:anywhere || newsletter in:anywhere}"
+    },
+    { "name": "thread-draft", "hash": "#/all/t/{agentDraftThread}" },
+    { "name": "search", "hash": "#/search?q=rechnung%20has%3Aattachment" },
+    { "name": "palette", "hash": "#/inbox?palette=1" },
+    { "name": "compose", "hash": "#/inbox?compose=new" },
+    { "name": "add-account", "hash": "#/inbox?dialog=add-account" },
+    { "name": "shortcuts", "hash": "#/inbox?dialog=shortcuts" },
+    { "name": "settings-accounts", "hash": "#/settings/accounts" },
+    { "name": "settings-agents", "hash": "#/settings/agents" },
+    { "name": "activity", "hash": "#/activity" }
+  ]
+}

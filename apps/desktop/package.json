@@ -1,0 +1,22 @@
+{
+  "name": "@fancy-mail/desktop",
+  "productName": "Fancy Mail",
+  "version": "0.1.0",
+  "description": "A calm, fast email client for many accounts.",
+  "author": "OtakuGamerAds",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
+  },
+  "devDependencies": {
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2"
+  }
+}
