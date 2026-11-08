@@ -155,13 +155,17 @@ export function SignInSettings() {
               </button>{" "}
               and make a new project.
             </li>
-            <li>Under APIs & Services, enable the Gmail API.</li>
             <li>
-              Set up the OAuth consent screen as <span className="text-foreground">External</span>, then publish it{" "}
+              In Google Auth Platform › Branding, fill in an app name and your email. For the home page and privacy policy, Fancy Mail's own pages work:{" "}
+              <span className="select-all text-foreground">https://github.com/OtakuGamerAds/fancy-mail</span> and{" "}
+              <span className="select-all text-foreground">https://github.com/OtakuGamerAds/fancy-mail/blob/main/PRIVACY.md</span>. Leave the logo empty.
+            </li>
+            <li>
+              Under Audience, choose <span className="text-foreground">External</span> and click Publish app, so it says{" "}
               <span className="text-foreground">In production</span> (in Testing, Google signs you out every 7 days).
             </li>
             <li>
-              Under Credentials, create an OAuth client ID of type <span className="text-foreground">Desktop app</span>.
+              Under Clients, create a client of type <span className="text-foreground">Desktop app</span>. Copy its secret right away: Google shows it once.
             </li>
             <li>Paste its client ID and secret here.</li>
           </ol>
