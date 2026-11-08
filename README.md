@@ -61,7 +61,7 @@ working until you change your Google password.
 Sign in with Google explains it). Publish it **In production** — in "Testing" Google signs
 you out every 7 days.
 
-## Status (0.1.0)
+## Status
 
 Tested end to end against a real IMAP/SMTP server: adding an account, first sync, search,
 threading, bodies and attachments, labels as IMAP keywords, archive/trash/undo reaching the
@@ -71,6 +71,13 @@ with a copy in Sent, restarts, and a refused password keeping the mail and askin
 Written but not yet tried against the real thing: Gmail's own extensions (labels, All Mail,
 threads), and Google/Microsoft sign-in. Use app passwords for Gmail first. Drafts live on this
 computer only (they are not uploaded to the server's Drafts folder).
+
+## Install
+
+Download `Fancy-Mail-Setup-<version>.exe` from
+[Releases](https://github.com/OtakuGamerAds/fancy-mail/releases/latest) (Windows; not signed,
+so SmartScreen asks once: More info › Run anyway). New versions show up on the update button
+in the sidebar; one click downloads and restarts into them. Your mail and accounts stay.
 
 ## Demo mail
 

@@ -73,6 +73,20 @@ packages/contracts  zod schemas and types for everything crossing a process boun
   `enum`, no parameter properties, no namespaces), `import type` for types, and `.ts`
   extensions on relative imports.
 
+## Shipping a change
+
+The repository is public, and the installed app updates itself from its GitHub Releases (the
+update button; checked 10 s after start and every 4 minutes). A change reaches the person when:
+
+1. it is committed on `main` with typecheck and tests passing;
+2. `"version"` is bumped in all five package.json files (root, apps/*, packages/contracts);
+3. that is committed and pushed, then `pnpm release` (tags vX.Y.Z, builds, uploads the
+   installer, its .blockmap and latest.yml). Check the feed afterwards:
+   https://github.com/OtakuGamerAds/fancy-mail/releases/latest/download/latest.yml
+
+Because it is public, nothing personal goes in: demo data stays fictional (`.example`
+domains, made-up people), no real names, addresses, paths or tokens.
+
 ## The ways to hurt yourself
 
 1. **Touching the user's real data.** The installed app keeps its data in
