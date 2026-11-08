@@ -126,7 +126,11 @@ function PaletteBody({ onClose }: { onClose(): void }) {
         ),
         text: trimmed,
         icon: <SearchIcon />,
-        run: () => go({ page: "mail", view: { kind: "search", query: trimmed, scope: { type: "all" } }, threadId: null }),
+        // The same search as the sidebar's field: it stays on, narrowing every view, until cleared.
+        run: () => {
+          useUi.getState().setSearch(trimmed);
+          go({ page: "mail", view: { kind: "inbox", scope: { type: "all" } }, threadId: null });
+        },
       });
     }
 

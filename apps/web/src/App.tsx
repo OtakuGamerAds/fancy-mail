@@ -1,6 +1,6 @@
 /**
- * The window: Sidebar | Thread list | Reader (or Settings / Activity in place of the last
- * two), the overlays (palette, compose, dialogs, the Activity sheet) and the toasts.
+ * The window: Sidebar | Thread list | Reader or a new message (or Settings / Activity in
+ * place of the last two), the overlays (palette, dialogs, the Activity sheet) and the toasts.
  */
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
@@ -8,7 +8,7 @@ import { useEffect, useRef } from "react";
 import { ActivityPage, ActivitySheet } from "~/components/activity/Activity";
 import { AddAccountDialog } from "~/components/accounts/AddAccountDialog";
 import { CommandPalette } from "~/components/CommandPalette";
-import { ComposeDialog } from "~/components/compose/ComposeDialog";
+import { ComposePane } from "~/components/compose/ComposePane";
 import { ConnectionPill } from "~/components/ConnectionPill";
 import { ConfirmDialogs } from "~/components/dialogs/ConfirmDialogs";
 import { LabelPickerDialog } from "~/components/LabelPicker";
@@ -49,6 +49,7 @@ function useRouterSync() {
       if (overlays.palette) ui.openPalette();
       if (overlays.compose === "new") ui.openCompose();
       if (overlays.dialog) ui.openDialog({ type: overlays.dialog });
+      if (overlays.search !== undefined) ui.setSearch(overlays.search);
     });
     startRouter();
     return off;
@@ -123,7 +124,6 @@ function Shell() {
         )}
       </main>
       <CommandPalette />
-      <ComposeDialog />
       <AddAccountDialog />
       <ShortcutsDialog />
       <ConfirmDialogs />
@@ -142,6 +142,7 @@ function MailView({ view, threadId }: { view: ViewRef; threadId: string | null }
   const width = useElementWidth(boxRef);
   const { data: bootstrap } = useBootstrap();
   const readingPane = bootstrap?.settings.readingPane ?? "right";
+  const compose = useUi((s) => s.compose);
   const listWidth = useUi((s) => s.listWidth);
   const setListWidth = useUi((s) => s.setListWidth);
   const resize = useColumnResize({
@@ -171,13 +172,25 @@ function MailView({ view, threadId }: { view: ViewRef; threadId: string | null }
             <div {...resize.handleProps} style={{ left: "100%" }} aria-label="Resize the list" />
           </div>
           <div className="h-full min-w-0 flex-1">
-            {threadId ? <Reader key={threadId} threadId={threadId} onClose={close} fullWidth={false} /> : <NoConversation />}
+            {compose ? (
+              <ComposePane compose={compose} fullWidth={false} />
+            ) : threadId ? (
+              <Reader key={threadId} threadId={threadId} onClose={close} fullWidth={false} />
+            ) : (
+              <NoConversation />
+            )}
           </div>
         </>
       ) : (
-        // One column: the list, or the open conversation in its place.
+        // One column: the list, or the open conversation (or new message) in its place.
         <div className="min-w-0 flex-1">
-          {threadId ? <Reader key={threadId} threadId={threadId} onClose={close} fullWidth /> : <ThreadList view={view} rightmost />}
+          {compose ? (
+            <ComposePane compose={compose} fullWidth />
+          ) : threadId ? (
+            <Reader key={threadId} threadId={threadId} onClose={close} fullWidth />
+          ) : (
+            <ThreadList view={view} rightmost />
+          )}
         </div>
       )}
     </div>

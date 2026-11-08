@@ -1,5 +1,5 @@
 import { parseQuery } from "@fancy-mail/contracts";
-import type { Activity, ModifyAction, SearchResult, ThreadDetail } from "@fancy-mail/contracts";
+import type { Activity, ModifyAction, SearchFacets, SearchResult, ThreadDetail } from "@fancy-mail/contracts";
 
 import type { SqlValue } from "../db/sqlite.ts";
 import { AppError } from "../errors.ts";
@@ -150,6 +150,15 @@ export function createThreadsService(env: ServiceEnv) {
         total,
         queryErrors: errors,
       };
+    },
+
+    /** Where a query's matches are, per account and per label (hidden accounts stay out). */
+    facets(input: { query: string }, ctx: CallContext): SearchFacets {
+      const { compiled, errors } = compile(input.query, ctx);
+      const { byAccount, byLabel } = store.threads.facets(compiled.where, compiled.params as SqlValue[]);
+      let total = 0;
+      for (const n of byAccount.values()) total += n;
+      return { total, byAccount: Object.fromEntries(byAccount), byLabel: Object.fromEntries(byLabel), queryErrors: errors };
     },
 
     /** Every thread id a query matches (up to `max`), for actions "on everything that matches". */

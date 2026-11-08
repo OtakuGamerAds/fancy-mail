@@ -28,6 +28,7 @@ export function rpcHandlers(services: Services): HandlerTable {
   return {
     "app.bootstrap": () => services.bootstrap(),
     "threads.search": (p, ctx) => services.threads.search(p, ctx),
+    "threads.facets": (p, ctx) => services.threads.facets(p, ctx),
     "threads.get": (p, ctx) => services.threads.get(p.threadId, ctx),
     "threads.modify": (p, ctx) => services.threads.modify(p.threadIds, p.actions, ctx),
     "threads.fetchBodies": (p, ctx) => (services.threads.fetchBodies(p.threadId, ctx), EMPTY),

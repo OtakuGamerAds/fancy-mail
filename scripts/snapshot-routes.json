@@ -11,14 +11,15 @@
     { "name": "inbox", "hash": "#/inbox" },
     { "name": "unread", "hash": "#/unread" },
     { "name": "group-banking", "hash": "#/g/{group:Banking}/inbox" },
-    { "name": "account-inbox", "hash": "#/a/{account:studio@brightwave.example}/inbox" },
+    { "name": "account-inbox", "hash": "#/a/{account:billing@brightwave.example}/inbox" },
     { "name": "label-invoices", "hash": "#/label/{label:Invoices}" },
     {
       "name": "thread-html",
       "hash": "#/label/{label:Newsletters}/t/{thread:label:Newsletters in:anywhere || newsletter in:anywhere}"
     },
     { "name": "thread-draft", "hash": "#/all/t/{agentDraftThread}" },
-    { "name": "search", "hash": "#/search?q=rechnung%20has%3Aattachment" },
+    { "name": "search", "hash": "#/inbox?search=invoice" },
+    { "name": "search-account", "hash": "#/a/{account:billing@brightwave.example}/inbox?search=invoice" },
     { "name": "palette", "hash": "#/inbox?palette=1" },
     { "name": "compose", "hash": "#/inbox?compose=new" },
     { "name": "add-account", "hash": "#/inbox?dialog=add-account" },

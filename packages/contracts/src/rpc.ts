@@ -74,6 +74,15 @@ export const SearchResult = z.object({
 });
 export type SearchResult = z.infer<typeof SearchResult>;
 
+/** Where a search's matches are: conversations per account and per label (the sidebar's counts). */
+export const SearchFacets = z.object({
+  total: z.number().int(),
+  byAccount: z.record(z.string(), z.number().int()),
+  byLabel: z.record(z.string(), z.number().int()),
+  queryErrors: z.array(z.string()),
+});
+export type SearchFacets = z.infer<typeof SearchFacets>;
+
 export const ThreadDetail = z.object({
   thread: ThreadSummary,
   messages: z.array(Message),
@@ -108,6 +117,10 @@ export const RPC_METHODS = {
       limit: z.number().int().min(1).max(500).optional(),
     }),
     result: SearchResult,
+  },
+  "threads.facets": {
+    params: z.object({ query: z.string() }),
+    result: SearchFacets,
   },
   "threads.get": {
     params: z.object({ threadId: z.string() }),

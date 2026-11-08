@@ -93,6 +93,8 @@ async function settle(win: BrowserWindow, inflight: () => number): Promise<strin
   return result;
 }
 
+const NO_MOTION = "*, *::before, *::after { animation-duration: 0s !important; animation-delay: 0s !important; transition: none !important; }";
+
 async function load(win: BrowserWindow, url: string): Promise<void> {
   try {
     await win.loadURL(url);
@@ -116,6 +118,9 @@ export async function runSnapshots(win: BrowserWindow, plan: Plan): Promise<numb
     try {
       // A fresh document per route, so no overlay or selection carries over.
       await load(win, `${plan.url}/?snapshot=${index}${route.hash}`);
+      // An off-screen window never advances animations, so things that fade or slide in would
+      // stay at their first frame: show every view as it ends up.
+      await win.webContents.insertCSS(NO_MOTION);
       let state = await settle(win, inflight);
       if (route.click) {
         const clicked = (await win.webContents.executeJavaScript(

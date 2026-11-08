@@ -103,7 +103,11 @@ export function DraftCard({ draft, threadId }: { draft: Draft; threadId: string 
           size="sm"
           variant="outline"
           disabled={inFlight || busy !== null}
-          onClick={() => useUi.getState().requestReply(threadId, draft.mode === "new" ? "reply" : draft.mode, draft.id)}
+          onClick={() =>
+            draft.mode === "new"
+              ? useUi.getState().openCompose({ draftId: draft.id, threadId: draft.conversationId, accountId: draft.accountId })
+              : useUi.getState().requestReply(threadId, draft.mode, draft.id)
+          }
         >
           <PencilIcon />
           Edit

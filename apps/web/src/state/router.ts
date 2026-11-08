@@ -9,6 +9,7 @@
  *   any of these + /t/<threadId>               an open conversation
  *   #/settings/<section>  #/activity
  *   ?palette=1 ?compose=new ?dialog=add-account ?dialog=shortcuts   overlays
+ *   ?search=…                                  puts that in the sidebar's search
  */
 import {
   VIEW_KINDS,
@@ -44,6 +45,7 @@ export interface Overlays {
   palette?: boolean;
   compose?: "new";
   dialog?: "add-account" | "shortcuts";
+  search?: string;
 }
 
 export const INBOX_ROUTE: Route = { page: "mail", view: { kind: "inbox", scope: { type: "all" } }, threadId: null };
@@ -68,6 +70,8 @@ export function parseHash(hash: string): { route: Route; overlays: Overlays; val
   if (params.get("compose") === "new") overlays.compose = "new";
   const dialog = params.get("dialog");
   if (dialog === "add-account" || dialog === "shortcuts") overlays.dialog = dialog;
+  const search = params.get("search");
+  if (search !== null) overlays.search = search;
 
   const segments = path.split("/").filter(Boolean).map(safeDecode);
   const invalid = { route: INBOX_ROUTE, overlays, valid: false };

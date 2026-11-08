@@ -242,6 +242,8 @@ export const Draft = z.object({
   mode: DraftMode,
   /** The conversation it answers or forwards; null for a new message. */
   threadId: z.string().nullable(),
+  /** The conversation it shows up as in lists: `threadId`, or a new message's own. */
+  conversationId: z.string(),
   /** The message it answers or forwards. */
   sourceMessageId: z.string().nullable(),
   to: z.array(Address),

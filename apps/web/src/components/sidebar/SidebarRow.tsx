@@ -8,7 +8,7 @@ import { forwardRef, useEffect, useRef, type ReactNode } from "react";
 import { cn } from "~/lib/utils";
 
 export const sidebarRowClass =
-  "group/row relative flex h-8 w-full min-w-0 cursor-pointer items-center gap-2 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] text-left text-sm font-medium text-sidebar-muted-foreground/80 outline-hidden ring-ring hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-inset active:bg-sidebar-row-active data-[active=true]:bg-sidebar-row-selected data-[active=true]:text-sidebar-foreground data-[drop-target=true]:bg-primary/12 data-[drop-target=true]:ring-1 data-[drop-target=true]:ring-primary/50 [&>svg]:shrink-0 [&>svg:not([class*='size-'])]:size-4 [&>svg:not([class*='text-'])]:text-[var(--sidebar-icon-color)] hover:[&>svg:not([class*='text-'])]:text-sidebar-foreground data-[active=true]:[&>svg:not([class*='text-'])]:text-sidebar-foreground";
+  "group/row relative flex h-8 w-full min-w-0 cursor-pointer items-center gap-2 rounded-[var(--control-radius)] transition-[background-color,color,opacity] duration-150 px-[var(--sidebar-row-content-inset)] text-left text-sm font-medium text-sidebar-muted-foreground/80 outline-hidden ring-ring hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-inset active:bg-sidebar-row-active data-[active=true]:bg-sidebar-row-selected data-[active=true]:text-sidebar-foreground data-[drop-target=true]:bg-primary/12 data-[drop-target=true]:ring-1 data-[drop-target=true]:ring-primary/50 [&>svg]:shrink-0 [&>svg:not([class*='size-'])]:size-4 [&>svg:not([class*='text-'])]:text-[var(--sidebar-icon-color)] hover:[&>svg:not([class*='text-'])]:text-sidebar-foreground data-[active=true]:[&>svg:not([class*='text-'])]:text-sidebar-foreground";
 
 export interface SidebarRowProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "children"> {
   active?: boolean;
@@ -27,9 +27,11 @@ export interface SidebarRowProps extends Omit<React.HTMLAttributes<HTMLDivElemen
 }
 
 export const SidebarRow = forwardRef<HTMLDivElement, SidebarRowProps>(function SidebarRow(
-  { active, dropTarget, leading, label, trailing, actions, actionsOpen, emphasized, onActivate, className, ...props },
+  { active, dropTarget, leading, label, trailing, actions, actionsOpen, emphasized, onActivate, className, onClick, onKeyDown, ...props },
   ref,
 ) {
+  // A wrapper's handlers (a tooltip trigger, a drag handle) run first, then the row's own:
+  // spreading them over the row's would silently take its click away.
   return (
     <div
       ref={ref}
@@ -40,11 +42,13 @@ export const SidebarRow = forwardRef<HTMLDivElement, SidebarRowProps>(function S
       aria-current={active ? "page" : undefined}
       className={cn(sidebarRowClass, className)}
       onClick={(event) => {
+        onClick?.(event);
         if (event.defaultPrevented) return;
         onActivate?.();
       }}
       onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
+        onKeyDown?.(event);
+        if (event.defaultPrevented || event.target !== event.currentTarget) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onActivate?.();

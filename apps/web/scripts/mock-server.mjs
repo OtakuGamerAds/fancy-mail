@@ -188,6 +188,7 @@ const drafts = [
     accountId: "a_ads",
     mode: "reply",
     threadId: "t_2",
+    conversationId: "t_2",
     sourceMessageId: "t_2_m0",
     to: [people[(2 * 7) % people.length]],
     cc: [],
@@ -382,6 +383,18 @@ class RpcError extends Error {
 const handlers = {
   "app.bootstrap": () => bootstrap(),
   "threads.search": (p) => search(p),
+  "threads.facets": ({ query }) => {
+    const parsed = parseQuery(query);
+    const byAccount = {};
+    const byLabel = {};
+    let total = 0;
+    for (const t of liveThreads().filter((x) => matches(x, parsed.terms))) {
+      total++;
+      byAccount[t.accountId] = (byAccount[t.accountId] ?? 0) + 1;
+      for (const l of t.labelIds) byLabel[l] = (byLabel[l] ?? 0) + 1;
+    }
+    return { total, byAccount, byLabel, queryErrors: parsed.errors };
+  },
   "threads.get": ({ threadId }) => {
     const thread = threads.find((t) => t.id === threadId);
     if (!thread) throw new RpcError("not_found", "That conversation isn't here anymore.");
@@ -490,7 +503,7 @@ const handlers = {
   "drafts.save": ({ draft }) => {
     let d = draft.id ? drafts.find((x) => x.id === draft.id) : null;
     if (!d) {
-      d = { id: id("d"), createdBy: { kind: "user" }, sendState: "draft", sendError: null };
+      d = { id: id("d"), conversationId: draft.threadId ?? id("t"), createdBy: { kind: "user" }, sendState: "draft", sendError: null };
       drafts.push(d);
     }
     Object.assign(d, draft, { id: d.id, updatedAt: Date.now() });

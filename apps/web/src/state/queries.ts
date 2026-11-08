@@ -35,6 +35,8 @@ export const qk = {
   bootstrap: ["bootstrap"] as const,
   threadsAll: ["threads"] as const,
   threads: (query: string) => ["threads", query] as const,
+  facetsAll: ["facets"] as const,
+  facets: (query: string) => ["facets", query] as const,
   threadAll: ["thread"] as const,
   thread: (id: string) => ["thread", id] as const,
   activity: ["activity"] as const,
@@ -74,12 +76,26 @@ export function threadsQueryOptions(query: string) {
   };
 }
 
-/** `keepPrevious`: while a new search in the same view loads, the last results stay. */
-export function useThreads(query: string | null, keepPrevious = false) {
+/**
+ * The rows of a list. While the next view or search loads, the last rows stay (the list then
+ * swaps them in one step instead of blinking through a loading state).
+ */
+export function useThreads(query: string | null) {
   return useInfiniteQuery({
     ...threadsQueryOptions(query ?? ""),
     enabled: query !== null,
-    ...(keepPrevious ? { placeholderData: keepPreviousData } : {}),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Where a search's matches are, for the sidebar (nothing while there is no search). */
+export function useSearchFacets(search: string) {
+  const query = search.trim();
+  return useQuery({
+    queryKey: qk.facets(query),
+    queryFn: () => rpc("threads.facets", { query }),
+    enabled: query.length > 0,
+    placeholderData: keepPreviousData,
   });
 }
 

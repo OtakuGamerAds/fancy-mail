@@ -1,6 +1,6 @@
 /**
- * One conversation in the list. Comfortable: two lines in 68 px (people · date, subject —
- * snippet · labels). Compact: one line in 40 px. Hover shows quick actions where the date is;
+ * One conversation in the list. Comfortable: two lines in 68 px (people · date, labels then
+ * subject — snippet). Compact: one line in 40 px. Hover shows quick actions where the date is;
  * the checkbox takes the unread dot's place on hover or while anything is checked.
  */
 import type { ThreadSummary } from "@fancy-mail/contracts";
@@ -27,6 +27,10 @@ import type { Directory } from "~/state/queries";
 export const ROW_HEIGHT = { comfortable: 68, compact: 40 } as const;
 
 export function participantsText(thread: ThreadSummary, dir: Directory): string {
+  // A new message still being written: who it is for.
+  if (thread.messageCount === 0 && thread.draftCount > 0) {
+    return thread.participants.length > 0 ? `To ${thread.participants.map((p) => displayName(p)).join(", ")}` : "No recipients yet";
+  }
   const names = thread.participants.map((p) =>
     dir.ownAddresses.has(p.address.toLowerCase()) ? "me" : displayName(p),
   );
@@ -93,7 +97,7 @@ export const ThreadRow = memo(function ThreadRow({
     .map((id) => dir.labelById.get(id))
     .filter((l): l is NonNullable<typeof l> => !!l);
   const compactRow = density === "compact";
-  const shownLabels = labels.slice(0, compactRow ? 1 : 2);
+  const shownLabels = labels.slice(0, compactRow ? 2 : 3);
   const people = participantsText(thread, dir);
   const subject = thread.subject.trim() || "(no subject)";
   const compact = density === "compact";
@@ -166,12 +170,6 @@ export const ThreadRow = memo(function ThreadRow({
 
   const extras = (
     <span className="flex shrink-0 items-center gap-1">
-      {shownLabels.map((label) => (
-        <LabelChip key={label.id} label={label} className="max-w-24" />
-      ))}
-      {labels.length > shownLabels.length ? (
-        <span className="text-muted-foreground text-xs tabular-nums">+{labels.length - shownLabels.length}</span>
-      ) : null}
       {thread.hasAttachments ? <PaperclipIcon aria-label="Has attachments" className="size-3.5 text-muted-foreground" /> : null}
       {thread.starred ? <StarIcon aria-label="Starred" className="size-3.5 fill-amber-400 text-amber-400" /> : null}
     </span>
@@ -194,9 +192,17 @@ export const ThreadRow = memo(function ThreadRow({
   );
 
   const subjectLine = (
-    <span className="flex min-w-0 flex-1 items-baseline gap-0 truncate">
-      {thread.draftCount > 0 ? <span className="me-1.5 shrink-0 text-destructive-foreground text-xs font-medium">Draft</span> : null}
-      <span className={cn("truncate", unread ? "font-semibold text-foreground" : "text-foreground/90")}>
+    <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
+      {thread.draftCount > 0 ? <span className="me-0.5 shrink-0 text-destructive-foreground text-xs font-medium">Draft</span> : null}
+      {shownLabels.map((label) => (
+        <LabelChip key={label.id} label={label} className="max-w-28 shrink-0" />
+      ))}
+      {labels.length > shownLabels.length ? (
+        <span className="shrink-0 text-muted-foreground text-xs tabular-nums" title={labels.slice(shownLabels.length).map((l) => l.name).join(", ")}>
+          +{labels.length - shownLabels.length}
+        </span>
+      ) : null}
+      <span className={cn("ms-0.5 min-w-0 truncate", unread ? "font-semibold text-foreground" : "text-foreground/90")}>
         <bdi>{subject}</bdi>
         {thread.snippet ? (
           <span className="font-normal text-muted-foreground">

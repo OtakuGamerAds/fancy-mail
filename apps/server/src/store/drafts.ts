@@ -55,6 +55,7 @@ export function toContractDraft(d: DraftRecord): Draft {
     accountId: d.accountId,
     mode: d.mode,
     threadId: d.mode === "new" ? null : d.threadId,
+    conversationId: d.threadId,
     sourceMessageId: d.sourceMessageId,
     to: d.to,
     cc: d.cc,

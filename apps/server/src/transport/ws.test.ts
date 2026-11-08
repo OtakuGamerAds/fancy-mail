@@ -32,6 +32,11 @@ describe("WebSocket RPC", () => {
     const page = await call("threads.search", { query: "in:inbox", limit: 10 });
     await call("threads.get", { threadId: page.threads[0].id });
     await call("threads.fetchBodies", { threadId: page.threads[0].id });
+    const facets = await call("threads.facets", { query: "invoice" });
+    const all = await call("threads.search", { query: "invoice", limit: 1 });
+    expect(facets.total).toBe(all.total);
+    expect(Object.values(facets.byAccount as Record<string, number>).reduce((a, b) => a + b, 0)).toBe(all.total);
+    expect(Object.keys(facets.byLabel).length).toBeGreaterThan(0);
     await call("activity.list", { limit: 5 });
     await call("drafts.list");
     await call("mcp.info");

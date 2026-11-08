@@ -6,7 +6,7 @@ import type { DraftMode } from "@fancy-mail/contracts";
 import { create } from "zustand";
 
 import { clamp, safeStorage } from "~/lib/utils";
-import { INBOX_ROUTE, type Route } from "./router";
+import { INBOX_ROUTE, navigate, type Route } from "./router";
 
 export const SIDEBAR_MIN = 220;
 export const SIDEBAR_MAX = 380;
@@ -23,7 +23,9 @@ export interface ComposeState {
   accountId: string | null;
   to?: string;
   subject?: string;
-  /** Changes each time compose opens, so the dialog starts fresh. */
+  /** The conversation the draft shows up as in the list, once it has been saved. */
+  threadId: string | null;
+  /** Changes each time compose opens, so the composer starts fresh. */
   session: number;
 }
 
@@ -49,8 +51,8 @@ interface UiState {
   sidebarWidth: number;
   listWidth: number;
 
-  /** Typed into the list's search field, per view (cleared when the view changes). */
-  listSearch: string;
+  /** The sidebar's search: it narrows every view (and the sidebar's counts) until cleared. */
+  search: string;
   listFilter: ListFilter;
 
   /** Checked conversations (multi-select). */
@@ -84,7 +86,7 @@ interface UiState {
   toggleSidebar(): void;
   setSidebarWidth(width: number): void;
   setListWidth(width: number): void;
-  setListSearch(text: string): void;
+  setSearch(text: string): void;
   setListFilter(filter: ListFilter): void;
   setSelection(ids: string[], anchor?: string | null): void;
   clearSelection(): void;
@@ -93,6 +95,7 @@ interface UiState {
   openPalette(): void;
   closePalette(): void;
   openCompose(compose?: Partial<Omit<ComposeState, "session">>): void;
+  setComposeThread(threadId: string): void;
   closeCompose(): void;
   openDialog(dialog: DialogState): void;
   closeDialog(): void;
@@ -125,7 +128,7 @@ export const useUi = create<UiState>()((set, get) => ({
   sidebarCollapsed: stored.sidebarCollapsed,
   sidebarWidth: stored.sidebarWidth,
   listWidth: stored.listWidth,
-  listSearch: "",
+  search: "",
   listFilter: "all",
   selection: [],
   selectionAnchor: null,
@@ -149,11 +152,12 @@ export const useUi = create<UiState>()((set, get) => ({
     const prevKey = prev.page === "mail" ? JSON.stringify(prev.view) : prev.page;
     const nextKey = route.page === "mail" ? JSON.stringify(route.view) : route.page;
     if (prevKey !== nextKey) {
-      set({ route, listSearch: "", listFilter: "all", selection: [], selectionAnchor: null });
+      set({ route, listFilter: "all", selection: [], selectionAnchor: null });
     } else {
       set({ route });
     }
-    if (route.page === "mail" && route.threadId) set({ focusedThreadId: route.threadId });
+    // Opening a conversation takes the composer's place (it saved what was written).
+    if (route.page === "mail" && route.threadId) set({ focusedThreadId: route.threadId, compose: null });
   },
   toggleSidebar() {
     const sidebarCollapsed = !get().sidebarCollapsed;
@@ -170,7 +174,7 @@ export const useUi = create<UiState>()((set, get) => ({
     safeStorage.set("fm.listWidth", listWidth);
     set({ listWidth });
   },
-  setListSearch: (listSearch) => set({ listSearch }),
+  setSearch: (search) => set({ search }),
   setListFilter: (listFilter) => set({ listFilter, selection: [], selectionAnchor: null }),
   setSelection: (selection, anchor) =>
     set((s) => ({ selection, selectionAnchor: anchor === undefined ? s.selectionAnchor : anchor })),
@@ -179,16 +183,23 @@ export const useUi = create<UiState>()((set, get) => ({
   setFocusZone: (focusZone) => set({ focusZone }),
   openPalette: () => set((s) => ({ paletteOpen: true, paletteSession: s.paletteSession + 1 })),
   closePalette: () => set({ paletteOpen: false }),
-  openCompose: (compose) =>
+  openCompose(compose) {
+    // The composer takes the reader's place, so the open conversation closes.
+    const route = get().route;
+    if (route.page !== "mail") navigate(INBOX_ROUTE);
+    else if (route.threadId) navigate({ ...route, threadId: null });
     set({
       compose: {
         draftId: compose?.draftId ?? null,
         accountId: compose?.accountId ?? null,
         ...(compose?.to ? { to: compose.to } : {}),
         ...(compose?.subject ? { subject: compose.subject } : {}),
+        threadId: compose?.threadId ?? null,
         session: ++nonce,
       },
-    }),
+    });
+  },
+  setComposeThread: (threadId) => set((s) => (s.compose ? { compose: { ...s.compose, threadId } } : {})),
   closeCompose: () => set({ compose: null }),
   openDialog: (dialog) => set({ dialog }),
   closeDialog: () => set({ dialog: null }),

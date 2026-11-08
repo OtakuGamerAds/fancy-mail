@@ -11,6 +11,7 @@ import { isEditableTarget } from "~/lib/utils";
 import { undoLatest } from "~/state/actions";
 import { archiveOrInbox, runThreadCommand, targetThreadIds, toggleStar } from "~/state/commands";
 import { indexOfThread, listNav } from "~/state/listNav";
+import { openConversation } from "~/state/openConversation";
 import { navigate, navigateBackTo } from "~/state/router";
 import { useUi } from "~/state/ui";
 
@@ -56,7 +57,7 @@ const GO_TO: Record<string, ViewKind> = { i: "inbox", s: "starred", d: "drafts",
 
 function overlayOpen(): boolean {
   const ui = useUi.getState();
-  if (ui.paletteOpen || ui.compose || ui.dialog || ui.labelPickerFor || ui.activitySheetOpen) return true;
+  if (ui.paletteOpen || ui.dialog || ui.labelPickerFor || ui.activitySheetOpen) return true;
   return !!document.querySelector(
     "[data-slot=menu-popup], [data-slot=popover-popup], [data-slot=select-popup], [data-slot=dialog-popup], [data-slot=alert-dialog-popup]",
   );
@@ -141,9 +142,10 @@ export function useKeyboard() {
           ui.openCompose();
           return;
         case "/":
-          if (!inMail) return;
           event.preventDefault();
-          listNav.focusSearch();
+          // The search lives in the sidebar: bring it back if it was hidden.
+          if (ui.sidebarCollapsed) ui.toggleSidebar();
+          requestAnimationFrame(() => listNav.focusSearch());
           return;
         case "?":
           event.preventDefault();
@@ -160,6 +162,10 @@ export function useKeyboard() {
           }
           if (ui.selection.length > 0) {
             ui.clearSelection();
+            return;
+          }
+          if (ui.compose) {
+            ui.closeCompose(); // What was written is saved as it closes.
             return;
           }
           if (inMail && route.threadId) {
@@ -189,7 +195,7 @@ export function useKeyboard() {
           const id = ui.focusedThreadId;
           if (!id) return;
           event.preventDefault();
-          navigate({ ...route, threadId: id });
+          openConversation(id);
           return;
         }
         case "x": {

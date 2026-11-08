@@ -320,6 +320,24 @@ export function createThreadsStore(db: Db) {
       return { rows, total };
     },
 
+    /** Matching conversations per account and per label. */
+    facets(where: string, params: SqlValue[]): { byAccount: Map<string, number>; byLabel: Map<string, number> } {
+      const byAccount = new Map(
+        db
+          .all<{ id: string; n: number }>(`SELECT t.account_id AS id, COUNT(*) AS n FROM threads t WHERE (${where}) GROUP BY t.account_id`, ...params)
+          .map((r) => [r.id, Number(r.n)] as const),
+      );
+      const byLabel = new Map(
+        db
+          .all<{ id: string; n: number }>(
+            `SELECT tl.label_id AS id, COUNT(*) AS n FROM threads t JOIN thread_labels tl ON tl.thread_id = t.id WHERE (${where}) GROUP BY tl.label_id`,
+            ...params,
+          )
+          .map((r) => [r.id, Number(r.n)] as const),
+      );
+      return { byAccount, byLabel };
+    },
+
     /** How many messages an FTS5 expression matches (cheap; to choose a query plan). */
     textHits(match: string): number {
       return Number(db.value("SELECT COUNT(*) FROM message_fts WHERE message_fts MATCH ?", match) ?? 0);

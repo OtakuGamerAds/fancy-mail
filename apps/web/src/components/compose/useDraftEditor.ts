@@ -1,6 +1,6 @@
 /**
- * The state behind both composers (the reply under a conversation and the New message
- * dialog): fields, autosave 800 ms after typing stops (only once something was typed), send,
+ * The state behind both composers (the reply under a conversation and the new message in
+ * the reading pane): fields, autosave 800 ms after typing stops (only once something was typed), send,
  * discard, and attachments uploaded through POST /api/uploads.
  */
 import type { Address, Draft, DraftAttachment, DraftMode } from "@fancy-mail/contracts";
@@ -67,7 +67,7 @@ export async function uploadFile(file: File): Promise<DraftAttachment> {
   return "attachment" in body ? body.attachment : body;
 }
 
-export function useDraftEditor(initial: DraftFields, options: { draftId?: string | null }) {
+export function useDraftEditor(initial: DraftFields, options: { draftId?: string | null; onSaved?: (draft: Draft) => void }) {
   const [fields, setFields] = useState<DraftFields>(initial);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [uploading, setUploading] = useState<UploadingFile[]>([]);
@@ -80,6 +80,8 @@ export function useDraftEditor(initial: DraftFields, options: { draftId?: string
   const closedRef = useRef(false);
 
   fieldsRef.current = fields;
+  const onSavedRef = useRef(options.onSaved);
+  onSavedRef.current = options.onSaved;
 
   const save = useCallback((): Promise<Draft | undefined> => {
     if (timerRef.current) {
@@ -109,6 +111,7 @@ export function useDraftEditor(initial: DraftFields, options: { draftId?: string
         });
         idRef.current = draft.id;
         setSaveState("saved");
+        onSavedRef.current?.(draft);
         return draft;
       } catch (error) {
         dirtyRef.current = true;

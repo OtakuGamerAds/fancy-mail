@@ -1,7 +1,8 @@
 /**
  * The sidebar, after T3 Code's (components/Sidebar.tsx and ui/sidebar.tsx, MIT License — see
- * THIRD_PARTY_LICENSE_T3CODE.txt): New message and the search pill on top; Mail, Groups and
+ * THIRD_PARTY_LICENSE_T3CODE.txt): New message and the search field on top; Mail, Groups and
  * Labels sections that collapse; a pinned footer with Activity, the agent line and Settings.
+ * While a search is on, groups, accounts and labels count their matches (the rest fade).
  */
 import type { Account, Group, Label, ViewKind } from "@fancy-mail/contracts";
 import {
@@ -15,7 +16,6 @@ import {
   OctagonAlertIcon,
   PaperclipIcon,
   PlusIcon,
-  SearchIcon,
   SendIcon,
   SquarePenIcon,
   StarIcon,
@@ -40,6 +40,7 @@ import { useColumnResize } from "~/hooks/useColumnResize";
 import { AccountMenu, GroupMenu, LabelMenu, useRowMenu } from "./EntityMenus";
 import { Count, InlineNameField, RowIconButton, SidebarRow, sidebarRowClass } from "./SidebarRow";
 import { SidebarFooter } from "./SidebarFooter";
+import { MatchCount, SidebarSearch, useSearchMatches, type SearchMatches } from "./SidebarSearch";
 import { AccountsSortable, GroupsDnd, SortableItem, type DragHandle } from "./GroupsDnd";
 
 const MAIL_VIEWS: { kind: ViewKind; label: string; icon: LucideIcon }[] = [
@@ -102,29 +103,24 @@ export function Sidebar() {
 
 // ── Top: wordmark, New message, search ──────────────────────────────────────────────────────
 
+/** While searching, a row with no matches fades back. */
+const NO_MATCHES = "opacity-45 hover:opacity-100";
+
 function SidebarTop() {
   const openCompose = useUi((s) => s.openCompose);
-  const openPalette = useUi((s) => s.openPalette);
+  const composing = useUi((s) => s.compose !== null && s.compose.draftId === null && s.compose.threadId === null);
   return (
     <div className="flex shrink-0 flex-col gap-1 px-[var(--sidebar-content-inset)] pb-1">
       <div data-drag-region className="app-drag flex h-[var(--header-height)] items-center gap-2 ps-2.5">
         <img src="./favicon.png" alt="" className="size-5 rounded-[5px]" draggable={false} />
         <span className="font-semibold text-sm tracking-tight text-sidebar-foreground">Fancy Mail</span>
       </div>
-      <button type="button" className={sidebarRowClass} onClick={() => openCompose()}>
+      <button type="button" className={sidebarRowClass} data-active={composing ? "true" : undefined} onClick={() => openCompose()}>
         <SquarePenIcon />
         <span className="min-w-0 flex-1 truncate">New message</span>
         <Kbd>C</Kbd>
       </button>
-      <button
-        type="button"
-        onClick={openPalette}
-        className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-[var(--control-radius)] bg-sidebar-control-surface px-[var(--sidebar-row-content-inset)] text-left text-sm text-sidebar-muted-foreground ring-1 ring-sidebar-border outline-none transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <SearchIcon className="size-4 shrink-0 text-[var(--sidebar-icon-color)]" />
-        <span className="min-w-0 flex-1 truncate">Search mail</span>
-        <Kbd>Ctrl K</Kbd>
-      </button>
+      <SidebarSearch />
     </div>
   );
 }
@@ -179,6 +175,7 @@ function Section({
 
 function MailSection() {
   const active = useActiveKey();
+  const matches = useSearchMatches();
   const dir = useDirectory();
   const drafts = useDrafts();
   const moreCollapsed = useUi((s) => !!s.collapsedSections.more);
@@ -193,14 +190,20 @@ function MailSection() {
     const view: ViewRef = { kind: v.kind, scope: { type: "all" } };
     const Icon = v.icon;
     const count = counts[v.kind] ?? 0;
+    // Searching from Inbox looks through all mail, so Inbox counts every match.
+    const trailing = matches.active ? (
+      v.kind === "inbox" ? <MatchCount value={matches.total} /> : null
+    ) : (
+      <Count value={count} strong={v.kind === "inbox"} />
+    );
     return (
       <SidebarRow
         key={v.kind}
         active={active === viewKey(view)}
         leading={<Icon />}
         label={v.label}
-        emphasized={v.kind === "inbox" && count > 0}
-        trailing={<Count value={count} strong={v.kind === "inbox"} />}
+        emphasized={matches.active ? v.kind === "inbox" && matches.total > 0 : v.kind === "inbox" && count > 0}
+        trailing={trailing}
         onActivate={() => go(view)}
       />
     );
@@ -227,6 +230,7 @@ function MailSection() {
 
 function GroupsSection() {
   const dir = useDirectory();
+  const matches = useSearchMatches();
   const renaming = useUi((s) => s.renaming);
   const setRenaming = useUi((s) => s.setRenaming);
 
@@ -250,11 +254,11 @@ function GroupsSection() {
         groups={dir.groups}
         accountsByGroup={byGroup}
         renderGroup={(group, accounts, handle, dropTarget) => (
-          <GroupBlock key={group.id} group={group} accounts={accounts} handle={handle} dropTarget={dropTarget} />
+          <GroupBlock key={group.id} group={group} accounts={accounts} handle={handle} dropTarget={dropTarget} matches={matches} />
         )}
         renderUngrouped={(handleFor, dropTarget) =>
           ungrouped.length > 0 ? (
-            <UngroupedBlock accounts={ungrouped} handleFor={handleFor} dropTarget={dropTarget} />
+            <UngroupedBlock accounts={ungrouped} handleFor={handleFor} dropTarget={dropTarget} matches={matches} />
           ) : null
         }
       />
@@ -284,7 +288,19 @@ function GroupsSection() {
   );
 }
 
-function GroupBlock({ group, accounts, handle, dropTarget }: { group: Group; accounts: Account[]; handle: DragHandle; dropTarget: boolean }) {
+function GroupBlock({
+  group,
+  accounts,
+  handle,
+  dropTarget,
+  matches,
+}: {
+  group: Group;
+  accounts: Account[];
+  handle: DragHandle;
+  dropTarget: boolean;
+  matches: SearchMatches;
+}) {
   const active = useActiveKey();
   const renaming = useUi((s) => s.renaming);
   const setRenaming = useUi((s) => s.setRenaming);
@@ -292,6 +308,7 @@ function GroupBlock({ group, accounts, handle, dropTarget }: { group: Group; acc
   const view: ViewRef = { kind: "inbox", scope: { type: "group", groupId: group.id } };
   const isRenaming = renaming?.kind === "group" && renaming.id === group.id;
   const collapsed = group.collapsed;
+  const found = matches.accounts(accounts);
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -314,7 +331,7 @@ function GroupBlock({ group, accounts, handle, dropTarget }: { group: Group; acc
           style={handle.style}
           active={active === viewKey(view)}
           dropTarget={dropTarget}
-          className="ps-1"
+          className={cn("ps-1", matches.active && found === 0 && NO_MATCHES)}
           leading={
             <>
               <RowIconButton
@@ -332,8 +349,8 @@ function GroupBlock({ group, accounts, handle, dropTarget }: { group: Group; acc
             </>
           }
           label={group.name}
-          emphasized={group.unreadInboxCount > 0}
-          trailing={<Count value={group.unreadInboxCount} />}
+          emphasized={matches.active ? found > 0 : group.unreadInboxCount > 0}
+          trailing={matches.active ? <MatchCount value={found} /> : <Count value={group.unreadInboxCount} />}
           actionsOpen={menu.open}
           actions={
             <RowIconButton
@@ -354,19 +371,29 @@ function GroupBlock({ group, accounts, handle, dropTarget }: { group: Group; acc
         />
       )}
       <GroupMenu group={group} menu={menu} />
-      {!collapsed ? <AccountList accounts={accounts} groupKey={group.id} /> : null}
+      {!collapsed ? <AccountList accounts={accounts} groupKey={group.id} matches={matches} /> : null}
     </div>
   );
 }
 
-function UngroupedBlock({ accounts, dropTarget }: { accounts: Account[]; handleFor?: unknown; dropTarget: boolean }) {
+function UngroupedBlock({
+  accounts,
+  dropTarget,
+  matches,
+}: {
+  accounts: Account[];
+  handleFor?: unknown;
+  dropTarget: boolean;
+  matches: SearchMatches;
+}) {
   const collapsed = useUi((s) => !!s.collapsedSections.ungrouped);
   const toggle = useUi((s) => s.toggleSection);
   const unread = accounts.reduce((sum, a) => sum + a.unreadInboxCount, 0);
+  const found = matches.accounts(accounts);
   return (
     <div className="flex flex-col gap-0.5">
       <SidebarRow
-        className="ps-1"
+        className={cn("ps-1", matches.active && found === 0 && NO_MATCHES)}
         dropTarget={dropTarget}
         active={false}
         leading={
@@ -378,21 +405,21 @@ function UngroupedBlock({ accounts, dropTarget }: { accounts: Account[]; handleF
           </>
         }
         label={<span className="text-sidebar-muted-foreground">Ungrouped</span>}
-        trailing={<Count value={unread} />}
+        trailing={matches.active ? <MatchCount value={found} /> : <Count value={unread} />}
         onActivate={() => toggle("ungrouped")}
       />
-      {!collapsed ? <AccountList accounts={accounts} groupKey={null} /> : null}
+      {!collapsed ? <AccountList accounts={accounts} groupKey={null} matches={matches} /> : null}
     </div>
   );
 }
 
-function AccountList({ accounts, groupKey }: { accounts: Account[]; groupKey: string | null }) {
+function AccountList({ accounts, groupKey, matches }: { accounts: Account[]; groupKey: string | null; matches: SearchMatches }) {
   return (
     <div className="ms-[13px] flex min-w-0 flex-col gap-0.5 border-sidebar-border border-l ps-1.5">
       <AccountsSortable ids={accounts.map((a) => `account:${a.id}`)}>
         {accounts.map((account) => (
           <SortableItem key={account.id} id={`account:${account.id}`} data={{ type: "account", groupKey }}>
-            {(handle) => <AccountBlock account={account} handle={handle} />}
+            {(handle) => <AccountBlock account={account} handle={handle} matches={matches} />}
           </SortableItem>
         ))}
       </AccountsSortable>
@@ -400,7 +427,7 @@ function AccountList({ accounts, groupKey }: { accounts: Account[]; groupKey: st
   );
 }
 
-function AccountBlock({ account, handle }: { account: Account; handle: DragHandle }) {
+function AccountBlock({ account, handle, matches }: { account: Account; handle: DragHandle; matches: SearchMatches }) {
   const active = useActiveKey();
   const { data: bootstrap } = useBootstrap();
   const expanded = useUi((s) => !!s.expandedAccounts[account.id]);
@@ -410,6 +437,7 @@ function AccountBlock({ account, handle }: { account: Account; handle: DragHandl
   const menu = useRowMenu();
   const view: ViewRef = { kind: "inbox", scope: { type: "account", accountId: account.id } };
   const isRenaming = renaming?.kind === "account" && renaming.id === account.id;
+  const found = matches.account(account.id);
 
   const folders = useMemo(
     () =>
@@ -446,14 +474,14 @@ function AccountBlock({ account, handle }: { account: Account; handle: DragHandl
               {...handle.listeners}
               style={handle.style}
               active={active === viewKey(view)}
-              className="ps-1.5"
+              className={cn("ps-1.5", matches.active && found === 0 && NO_MATCHES)}
               leading={<AccountAvatar account={account} />}
               label={account.displayName || account.email}
-              emphasized={account.unreadInboxCount > 0}
+              emphasized={matches.active ? found > 0 : account.unreadInboxCount > 0}
               trailing={
                 <>
                   <AccountStatusMark account={account} />
-                  <Count value={account.unreadInboxCount} />
+                  {matches.active ? <MatchCount value={found} /> : <Count value={account.unreadInboxCount} />}
                 </>
               }
               actionsOpen={menu.open}
@@ -564,6 +592,8 @@ function LabelsSection() {
 
 function LabelRow({ label }: { label: Label }) {
   const active = useActiveKey();
+  const matches = useSearchMatches();
+  const found = matches.label(label.id);
   const renaming = useUi((s) => s.renaming);
   const setRenaming = useUi((s) => s.setRenaming);
   const menu = useRowMenu();
@@ -586,10 +616,11 @@ function LabelRow({ label }: { label: Label }) {
     <>
       <SidebarRow
         active={active === viewKey(view)}
+        className={cn(matches.active && found === 0 && NO_MATCHES)}
         leading={<ColorDot color={label.color} className="mx-1" />}
         label={label.name}
-        emphasized={label.unreadThreadCount > 0}
-        trailing={<Count value={label.unreadThreadCount} />}
+        emphasized={matches.active ? found > 0 : label.unreadThreadCount > 0}
+        trailing={matches.active ? <MatchCount value={found} /> : <Count value={label.unreadThreadCount} />}
         actionsOpen={menu.open}
         actions={
           <RowIconButton

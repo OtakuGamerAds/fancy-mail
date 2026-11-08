@@ -1,13 +1,14 @@
 /**
  * The conversation list: a header strip (title, scope, count, sync, select all — or the bulk
- * bar while rows are checked), the in-view search, filter chips, and the virtualized rows.
+ * bar while rows are checked), the filter chips with the search that narrows it (typed in the
+ * sidebar), and the virtualized rows. New messages still being written sit at the top of
+ * their inbox. When the view or the search changes, the new rows slide in.
  */
-import { QUERY_SYNTAX_HELP, type ThreadSummary } from "@fancy-mail/contracts";
+import type { Draft, ThreadSummary, ViewScope } from "@fancy-mail/contracts";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
-  CircleHelpIcon,
   InboxIcon,
   MailIcon,
   MailOpenIcon,
@@ -32,19 +33,20 @@ import { Button } from "~/components/ui/button";
 import { CheckboxMark } from "~/components/ui/checkbox";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuSub, MenuSubPopup, MenuSubTrigger } from "~/components/ui/menu";
-import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Skeleton } from "~/components/ui/skeleton";
 import { useDebounced } from "~/hooks/useDebounced";
 import { formatCount } from "~/lib/format";
+import { splitDraftBody } from "~/lib/plainText";
 import { cn, plural } from "~/lib/utils";
 import { errorMessage } from "~/rpc/client";
 import { syncNow } from "~/state/actions";
 import { archiveOrInbox, runThreadCommand, spamOrNot, toggleRead, toggleStar, trashOrRestore } from "~/state/commands";
 import { listNav } from "~/state/listNav";
-import { useBootstrap, useDirectory, useThreads } from "~/state/queries";
-import { navigate, viewKey, type ViewRef } from "~/state/router";
+import { openConversation } from "~/state/openConversation";
+import { useBootstrap, useDirectory, useDrafts, useThreads, type Directory } from "~/state/queries";
+import { viewKey, type ViewRef } from "~/state/router";
 import { useUi, type ListFilter } from "~/state/ui";
-import { describeView, listQuery } from "~/state/view";
+import { describeView, listQuery, searchWidens } from "~/state/view";
 
 const FILTERS: { id: ListFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -55,53 +57,87 @@ const FILTERS: { id: ListFilter; label: string }[] = [
 
 const EXAMPLES = ["from:anna has:attachment", "is:unread newer_than:7d"];
 
+/** How long rows that arrive after a change keep their entrance (rows scrolled into view later don't). */
+const ENTER_WINDOW_MS = 450;
+
+function inScope(accountId: string, scope: ViewScope, dir: Directory): boolean {
+  if (scope.type === "account") return accountId === scope.accountId;
+  if (scope.type === "group") return dir.accountById.get(accountId)?.groupId === scope.groupId;
+  return dir.accountById.has(accountId);
+}
+
+/** An unsent new message, as a row (it has no conversation of its own yet). */
+function draftRow(draft: Draft): ThreadSummary {
+  const text = splitDraftBody(draft.bodyText).text.replace(/\s+/g, " ").trim();
+  return {
+    id: draft.conversationId,
+    accountId: draft.accountId,
+    subject: draft.subject,
+    snippet: text.slice(0, 200),
+    participants: [...draft.to, ...draft.cc],
+    lastMessageAt: draft.updatedAt,
+    messageCount: 0,
+    unreadCount: 0,
+    starred: false,
+    hasAttachments: draft.attachments.length > 0,
+    labelIds: [],
+    inInbox: false,
+    inSent: false,
+    inTrash: false,
+    inSpam: false,
+    draftCount: 1,
+  };
+}
+
 export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: boolean }) {
   const { data: bootstrap } = useBootstrap();
   const dir = useDirectory();
   const info = describeView(view, bootstrap);
   const density = bootstrap?.settings.density ?? "comfortable";
 
-  const openThreadId = useUi((s) => (s.route.page === "mail" ? s.route.threadId : null));
+  const routeThreadId = useUi((s) => (s.route.page === "mail" ? s.route.threadId : null));
+  const composeThreadId = useUi((s) => s.compose?.threadId ?? null);
+  const openThreadId = routeThreadId ?? composeThreadId;
   const focusedThreadId = useUi((s) => s.focusedThreadId);
   const selection = useUi((s) => s.selection);
   const filter = useUi((s) => s.listFilter);
 
-  // ── Search within the view ──
-  const isSearchView = view.kind === "search";
-  const listSearch = useUi((s) => s.listSearch);
-  const [searchViewText, setSearchViewText] = useState(isSearchView ? view.query : "");
-  /** The query this field last put in the address (so its own echo doesn't overwrite typing). */
-  const pushedQuery = useRef<string | null>(null);
-  const routeQuery = view.kind === "search" ? view.query : null;
-  useEffect(() => {
-    if (routeQuery === null || routeQuery === pushedQuery.current) return;
-    // Changed from outside (the palette, a link): show it.
-    setSearchViewText(routeQuery);
-  }, [routeQuery]);
-  const typed = isSearchView ? searchViewText : listSearch;
-  const debouncedTyped = useDebounced(typed, 150);
-
-  useEffect(() => {
-    if (view.kind !== "search") return;
-    if (debouncedTyped === view.query) return;
-    pushedQuery.current = debouncedTyped;
-    navigate({ page: "mail", view: { ...view, query: debouncedTyped }, threadId: null }, { replace: true });
-  }, [debouncedTyped, view]);
-
-  const query = info.query === null ? null : listQuery(info.query, isSearchView ? "" : debouncedTyped, filter);
-  // Typing a search or switching a filter keeps the current rows until the new ones arrive;
-  // another view starts fresh.
-  const thisViewKey = viewKey(view);
-  const lastViewKey = useRef(thisViewKey);
-  const sameView = lastViewKey.current === thisViewKey || view.kind === "search";
-  useEffect(() => {
-    lastViewKey.current = thisViewKey;
-  }, [thisViewKey]);
-  const threadsQuery = useThreads(query, sameView);
-  const threads = useMemo(() => threadsQuery.data?.pages.flatMap((p) => p.threads) ?? [], [threadsQuery.data]);
+  // ── The query: the view, the sidebar's search, the filter chip ──
+  const rawSearch = useUi((s) => s.search);
+  const search = useDebounced(rawSearch, 150).trim();
+  const query = listQuery(view, info, search, filter);
+  const threadsQuery = useThreads(query);
+  const fetched = useMemo(() => threadsQuery.data?.pages.flatMap((p) => p.threads) ?? [], [threadsQuery.data]);
   const firstPage = threadsQuery.data?.pages[0];
   const total = firstPage?.total ?? 0;
   const queryErrors = firstPage?.queryErrors ?? [];
+
+  // New messages being written sit at the top of their inbox (not while searching or filtering).
+  const drafts = useDrafts();
+  const showDrafts = view.kind === "inbox" && !search && filter === "all";
+  const threads = useMemo(() => {
+    if (!showDrafts) return fetched;
+    const pending = (drafts.data ?? [])
+      .filter((d) => d.mode === "new" && (d.sendState === "draft" || d.sendState === "failed") && inScope(d.accountId, info.scope, dir))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map(draftRow);
+    if (pending.length === 0) return fetched;
+    const ids = new Set(pending.map((t) => t.id));
+    return [...pending, ...fetched.filter((t) => !ids.has(t.id))];
+  }, [showDrafts, drafts.data, fetched, info.scope, dir]);
+
+  // ── Entrance: when other rows arrive (another view, another search), they slide in ──
+  const settledQuery = threadsQuery.data && !threadsQuery.isPlaceholderData ? query : null;
+  const lastSettled = useRef<string | null>(null);
+  const [entering, setEntering] = useState<{ key: string; until: number } | null>(null);
+  useEffect(() => {
+    if (settledQuery === null || settledQuery === lastSettled.current) return;
+    lastSettled.current = settledQuery;
+    setEntering({ key: settledQuery, until: performance.now() + ENTER_WINDOW_MS });
+    const timer = setTimeout(() => setEntering(null), ENTER_WINDOW_MS);
+    return () => clearTimeout(timer);
+  }, [settledQuery]);
+  const animateRows = entering !== null && performance.now() < entering.until;
 
   // ── Virtual rows ──
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -125,21 +161,16 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
     }
   }, [lastIndex, threads.length, threadsQuery]);
 
-  // Back to the top when the view or the search changes.
+  // Back to the top when other rows arrive.
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 0 });
-  }, [query]);
+    if (settledQuery !== null) scrollRef.current?.scrollTo({ top: 0 });
+  }, [settledQuery]);
 
-  const searchRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     listNav.threads = threads;
   }, [threads]);
   useEffect(() => {
     listNav.scrollToIndex = (index) => virtualizer.scrollToIndex(index, { align: "auto" });
-    listNav.focusSearch = () => {
-      searchRef.current?.focus();
-      searchRef.current?.select();
-    };
   }, [virtualizer]);
 
   // ── Clicks ──
@@ -168,15 +199,12 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
 
   const onRowClick = useCallback(
     (event: ReactMouseEvent, thread: ThreadSummary) => {
-      const ui = useUi.getState();
       if (event.shiftKey || event.ctrlKey || event.metaKey) {
         toggleCheck(event, thread);
         return;
       }
-      ui.setFocusedThread(thread.id);
-      ui.setFocusZone("list");
-      const route = ui.route;
-      if (route.page === "mail") navigate({ page: "mail", view: route.view, threadId: thread.id });
+      useUi.getState().setFocusZone("list");
+      openConversation(thread.id);
     },
     [toggleCheck],
   );
@@ -204,7 +232,9 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
   const hideLabelId = view.kind === "label" ? view.labelId : null;
   const isPending = threadsQuery.isPending && query !== null;
   const showEmpty = !isPending && !threadsQuery.isError && threads.length === 0;
-  const searching = (isSearchView ? searchViewText : debouncedTyped).trim().length > 0 || filter !== "all";
+  const searching = search.length > 0 || filter !== "all" || view.kind === "search";
+  const setSearch = useUi((s) => s.setSearch);
+  const thisViewKey = viewKey(view);
 
   return (
     <section className="flex h-full min-w-0 flex-col bg-background" aria-label={info.title}>
@@ -219,7 +249,7 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
         ) : (
           <>
             <ShowSidebarButton />
-            <div className="flex min-w-0 flex-1 items-baseline gap-2 ps-1">
+            <div key={thisViewKey} className="flex min-w-0 flex-1 animate-fade-in items-baseline gap-2 ps-1">
               <h1 className="truncate font-semibold text-[15px] text-foreground tracking-tight" data-selectable>
                 {info.title}
               </h1>
@@ -228,7 +258,7 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
                   {info.scopeLabel}
                 </span>
               ) : null}
-              {firstPage ? (
+              {firstPage && !threadsQuery.isPlaceholderData ? (
                 <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
                   {total >= 10_000 ? "10,000+" : formatCount(total)}
                 </span>
@@ -262,60 +292,7 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
         </button>
       </div>
 
-      {/* Search within the view */}
-      <div className="shrink-0 px-3 pb-2">
-        <div className="relative flex h-8 items-center rounded-lg border border-input bg-input/32 transition-shadow focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/24">
-          <SearchIcon aria-hidden className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground/70" />
-          <input
-            ref={searchRef}
-            value={typed}
-            onChange={(event) => {
-              if (isSearchView) setSearchViewText(event.target.value);
-              else useUi.getState().setListSearch(event.target.value);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                if (typed) {
-                  if (isSearchView) setSearchViewText("");
-                  else useUi.getState().setListSearch("");
-                } else {
-                  event.currentTarget.blur();
-                }
-              } else if (event.key === "ArrowDown" || event.key === "Enter") {
-                event.preventDefault();
-                event.currentTarget.blur();
-                const first = listNav.threads[0];
-                if (first) useUi.getState().setFocusedThread(first.id);
-              }
-            }}
-            placeholder={isSearchView ? "Search all mail" : `Search in ${info.title}`}
-            aria-label="Search in this view"
-            spellCheck={false}
-            className="h-full min-w-0 flex-1 bg-transparent ps-8 pe-1 text-sm leading-8 outline-none placeholder:text-placeholder"
-          />
-          {typed ? (
-            <button
-              type="button"
-              aria-label="Clear search"
-              onClick={() => (isSearchView ? setSearchViewText("") : useUi.getState().setListSearch(""))}
-              className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <XIcon className="size-3.5" />
-            </button>
-          ) : null}
-          <SyntaxHelp />
-        </div>
-        {queryErrors.length > 0 && threads.length > 0 ? (
-          <ul className="mt-1.5 space-y-0.5 text-warning-foreground/90 text-xs">
-            {queryErrors.map((error) => (
-              <li key={error}>{error}</li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-
-      {/* Filter chips */}
+      {/* Filter chips, and the search that narrows this view */}
       <div className="flex shrink-0 items-center gap-1 border-border border-b px-3 pb-2" role="tablist" aria-label="Filter">
         {FILTERS.map((f) => (
           <button
@@ -325,7 +302,7 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
             aria-selected={filter === f.id}
             onClick={() => useUi.getState().setListFilter(f.id)}
             className={cn(
-              "h-6 cursor-pointer rounded-full px-2.5 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+              "h-6 shrink-0 cursor-pointer rounded-full px-2.5 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
               filter === f.id
                 ? "bg-white/[0.09] font-medium text-foreground"
                 : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -334,7 +311,34 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
             {f.label}
           </button>
         ))}
+        {rawSearch.trim() ? (
+          <span
+            className="ms-auto flex h-6 min-w-0 animate-fade-in items-center gap-1 rounded-full bg-primary/14 ps-2 pe-0.5 text-foreground text-xs"
+            title={searchWidens(view) ? "Searching all mail here, archived included" : undefined}
+          >
+            <SearchIcon className="size-3 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 truncate" dir="auto">
+              {rawSearch.trim()}
+            </span>
+            <button
+              type="button"
+              aria-label="Clear search"
+              title="Clear search"
+              onClick={() => setSearch("")}
+              className="grid size-5 shrink-0 cursor-pointer place-items-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
+            >
+              <XIcon className="size-3" />
+            </button>
+          </span>
+        ) : null}
       </div>
+      {queryErrors.length > 0 && threads.length > 0 ? (
+        <ul className="shrink-0 space-y-0.5 border-border border-b px-3 py-1.5 text-warning-foreground/90 text-xs">
+          {queryErrors.map((error) => (
+            <li key={error}>{error}</li>
+          ))}
+        </ul>
+      ) : null}
 
       {bootstrap?.hasDemoData ? <DemoBanner /> : null}
 
@@ -354,7 +358,7 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
           </Empty>
         ) : showEmpty ? (
           view.kind === "inbox" && !searching ? (
-            <Empty size="compact" className="h-full">
+            <Empty size="compact" className="h-full animate-fade-in">
               <EmptyHeader>
                 <EmptyMedia>
                   <InboxIcon className="size-8 text-muted-foreground/60" strokeWidth={1.5} />
@@ -363,7 +367,7 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
               </EmptyHeader>
             </Empty>
           ) : (
-            <Empty size="compact" className="h-full">
+            <Empty size="compact" className="h-full animate-fade-in">
               <EmptyHeader>
                 <EmptyMedia>
                   <SearchXIcon className="size-8 text-muted-foreground/60" strokeWidth={1.5} />
@@ -380,10 +384,7 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
                       <button
                         type="button"
                         className="cursor-pointer rounded bg-white/[0.06] px-1 font-mono text-foreground/85 text-xs hover:bg-white/10"
-                        onClick={() => {
-                          if (isSearchView) setSearchViewText(example);
-                          else useUi.getState().setListSearch(example);
-                        }}
+                        onClick={() => setSearch(example)}
                       >
                         {example}
                       </button>
@@ -394,29 +395,38 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
             </Empty>
           )
         ) : (
-          <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+          <div
+            key={entering?.key ?? lastSettled.current ?? "rows"}
+            style={{ height: virtualizer.getTotalSize(), position: "relative" }}
+          >
             {items.map((item) => {
               const thread = threads[item.index];
+              const position = item.index - (items[0]?.index ?? 0);
               return (
                 <div
                   key={item.key}
                   style={{ position: "absolute", top: 0, left: 0, width: "100%", height: rowHeight, transform: `translateY(${item.start}px)` }}
                 >
                   {thread ? (
-                    <ThreadRow
-                      thread={thread}
-                      dir={dir}
-                      density={density}
-                      open={thread.id === openThreadId}
-                      focused={thread.id === focusedThreadId}
-                      checked={selectionSet.has(thread.id)}
-                      selectionMode={selectionMode}
-                      showAccount={info.spansAccounts}
-                      hideLabelId={hideLabelId}
-                      onRowClick={onRowClick}
-                      onToggleCheck={toggleCheck}
-                      onContextMenu={onContextMenu}
-                    />
+                    <div
+                      className={cn("h-full", animateRows && "animate-enter")}
+                      style={animateRows ? { animationDelay: `${Math.min(position, 14) * 14}ms` } : undefined}
+                    >
+                      <ThreadRow
+                        thread={thread}
+                        dir={dir}
+                        density={density}
+                        open={thread.id === openThreadId}
+                        focused={thread.id === focusedThreadId}
+                        checked={selectionSet.has(thread.id)}
+                        selectionMode={selectionMode}
+                        showAccount={info.spansAccounts}
+                        hideLabelId={hideLabelId}
+                        onRowClick={onRowClick}
+                        onToggleCheck={toggleCheck}
+                        onContextMenu={onContextMenu}
+                      />
+                    </div>
                   ) : (
                     <RowSkeleton density={density} />
                   )}
@@ -429,25 +439,20 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
 
       <Menu open={rowMenu.open} onOpenChange={rowMenu.setOpen} modal={false}>
         <MenuPopup anchor={rowMenu.anchor ?? undefined} align="start" className="w-56">
-          {menuThread ? <RowMenuItems thread={menuThread} targets={menuTargets} view={view} /> : null}
+          {menuThread ? <RowMenuItems thread={menuThread} targets={menuTargets} /> : null}
         </MenuPopup>
       </Menu>
     </section>
   );
 }
 
-function RowMenuItems({ thread, targets, view }: { thread: ThreadSummary; targets: string[]; view: ViewRef }) {
+function RowMenuItems({ thread, targets }: { thread: ThreadSummary; targets: string[] }) {
   const many = targets.length > 1;
   const unread = thread.unreadCount > 0;
   return (
     <>
       {!many ? (
-        <MenuItem
-          onClick={() => {
-            const route = useUi.getState().route;
-            if (route.page === "mail") navigate({ page: "mail", view, threadId: thread.id });
-          }}
-        >
+        <MenuItem onClick={() => openConversation(thread.id)}>
           <MailOpenIcon />
           Open
         </MenuItem>
@@ -538,37 +543,6 @@ function BulkBar({ view, selection }: { view: ViewRef; selection: string[] }) {
         <OctagonAlertIcon />
       </IconButton>
     </div>
-  );
-}
-
-function SyntaxHelp() {
-  return (
-    <Popover>
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            aria-label="Search syntax"
-            title="Search syntax"
-            className="me-1 grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-          />
-        }
-      >
-        <CircleHelpIcon className="size-3.5" />
-      </PopoverTrigger>
-      <PopoverPopup side="bottom" align="end" width="lg" padding="compact">
-        <div className="space-y-2 py-1">
-          <div className="font-medium text-sm">Search syntax</div>
-          <ul className="space-y-1 text-muted-foreground text-xs leading-relaxed" data-selectable>
-            {QUERY_SYNTAX_HELP.split("\n").map((line) => (
-              <li key={line} className={cn(line.startsWith("  ") && "ps-3")}>
-                {line.trim()}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </PopoverPopup>
-    </Popover>
   );
 }
 
