@@ -307,6 +307,8 @@ export const Settings = z.object({
   remoteImages: z.enum(["ask", "always"]),
   allowedImageSenders: z.array(z.string()),
   closeToTray: z.boolean(),
+  /** Windows notifications for new mail in Primary (off by default). */
+  notifications: z.boolean(),
   /** Gmail's inbox tabs shown above the inbox; mail of the others stays in Primary (as in Gmail). */
   inboxTabs: z.array(z.enum(INBOX_TABS)),
   /** What new accounts get. Each account has its own level after that. */
@@ -335,6 +337,7 @@ export const DEFAULT_SETTINGS: Settings = {
   remoteImages: "ask",
   allowedImageSenders: [],
   closeToTray: true,
+  notifications: false,
   inboxTabs: ["promotions", "social"],
   defaultAgentAccess: "draft",
   mcp: { enabled: true, port: 47821 },

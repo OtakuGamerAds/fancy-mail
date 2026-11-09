@@ -139,8 +139,9 @@ function handle(event: ServerEvent) {
       break;
     case "newMail": {
       const desktop = bridge();
-      if (!desktop || document.hasFocus()) break;
-      const account = queryClient.getQueryData<Bootstrap>(qk.bootstrap)?.accounts.find((a) => a.id === event.accountId);
+      const boot = queryClient.getQueryData<Bootstrap>(qk.bootstrap);
+      if (!desktop || document.hasFocus() || !boot?.settings.notifications) break;
+      const account = boot.accounts.find((a) => a.id === event.accountId);
       desktop.notify({
         title: event.count === 1 ? "New message" : `${plural(event.count, "new message")}`,
         body: account ? account.email : "Fancy Mail",

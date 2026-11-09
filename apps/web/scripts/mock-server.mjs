@@ -220,6 +220,7 @@ let settings = {
   remoteImages: "ask",
   allowedImageSenders: [],
   closeToTray: true,
+  notifications: false,
   inboxTabs: ["promotions", "social", "forums"],
   defaultAgentAccess: "draft",
   mcp: { enabled: true, port: 47821 },

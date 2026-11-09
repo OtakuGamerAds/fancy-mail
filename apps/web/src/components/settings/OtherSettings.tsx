@@ -86,6 +86,19 @@ export function ReadingSettings() {
         />
         {isDesktop() ? (
           <SettingsRow
+            title="New mail notifications"
+            description="A Windows notification when mail lands in Primary while the window isn't in front."
+            control={
+              <Switch
+                checked={settings.notifications}
+                onCheckedChange={(notifications) => void updateSettings({ notifications })}
+                aria-label="New mail notifications"
+              />
+            }
+          />
+        ) : null}
+        {isDesktop() ? (
+          <SettingsRow
             title="Keep running in the tray"
             description="Closing the window keeps Fancy Mail syncing in the background."
             control={
@@ -103,7 +116,7 @@ export function ReadingSettings() {
       </SettingsSection>
       <SettingsSection
         title="Inbox tabs"
-        description="Gmail sorts your inbox into categories. Turn on the same tabs you have in Gmail; mail of the ones that are off stays in Primary, and only Primary mail notifies."
+        description="Gmail sorts your inbox into categories. Turn on the same tabs you have in Gmail; mail of the ones that are off stays in Primary, and only Primary mail can notify."
       >
         {INBOX_TABS.map((tab) => (
           <SettingsRow
