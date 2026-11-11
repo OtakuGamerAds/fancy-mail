@@ -59,6 +59,12 @@ const MAX_BODY_TRIES = 3;
 const PREFETCH_MAX_BYTES = 10 * 1024 * 1024;
 const ATTACHMENT_WAIT_MS = 120_000;
 const HEALTHY_SESSION_MS = 60_000;
+/** A search asks the server once typing stops for this long. */
+const SERVER_SEARCH_DEBOUNCE_MS = 700;
+/** The same words aren't asked again for this long. */
+const SERVER_SEARCH_FRESH_MS = 10 * 60_000;
+/** How many of the server's newest matches are downloaded (with their text). */
+const SERVER_SEARCH_MAX = 60;
 
 export interface WorkerDeps {
   db: Db;
@@ -76,7 +82,10 @@ export interface WorkerDeps {
 
 interface MailboxSyncState {
   initialDone?: boolean;
+  /** The lowest uid downloaded: older mail (below it) comes down in the background. */
   backfillCursor?: number | null;
+  /** Everything older than the first sync's window is here too. */
+  backfillDone?: boolean;
   lastExists?: number;
   passes?: number;
 }
@@ -170,6 +179,12 @@ export class AccountWorker {
   #index: ThreadIndex | null = null;
   readonly #gmThreads = new Map<string, string>();
   #passes = 0;
+  /** Older mail still to download, per mailbox (newest first), found once per connection. */
+  #older: Map<string, number[]> | null = null;
+  #olderProgress: { done: number; total: number } | null = null;
+  #serverSearch: string | null = null;
+  #serverSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  readonly #serverSearched = new Map<string, number>();
 
   constructor(accountId: string, deps: WorkerDeps) {
     this.accountId = accountId;
@@ -262,6 +277,22 @@ export class AccountWorker {
     if (messages.length > 0) this.#work.notify();
   }
 
+  /** Gmail: what the server finds for these words comes down (see SyncEngine.searchServer). */
+  searchServer(text: string): void {
+    const key = text.trim().toLocaleLowerCase();
+    if (key.length < 2 || !this.#gmail) return;
+    const at = this.#serverSearched.get(key);
+    if (at !== undefined && Date.now() - at < SERVER_SEARCH_FRESH_MS) return;
+    if (this.#serverSearchTimer) clearTimeout(this.#serverSearchTimer);
+    // Only the words typing stopped at, not every letter on the way.
+    this.#serverSearchTimer = setTimeout(() => {
+      this.#serverSearchTimer = null;
+      this.#serverSearch = key;
+      this.#work.notify();
+    }, SERVER_SEARCH_DEBOUNCE_MS);
+    this.#serverSearchTimer.unref?.();
+  }
+
   downloadAttachment(attachmentId: string): Promise<string> {
     if (this.#state === "auth-required") {
       return Promise.reject(new AppError("auth_failed", "This account needs to be reconnected before the attachment can be downloaded."));
@@ -321,7 +352,8 @@ export class AccountWorker {
   }
 
   #setReady(lastSyncAt?: number): void {
-    this.#setStatus("ready", failedOpsMessage(this.#deps.syncStore.failedCount(this.accountId)), null, lastSyncAt);
+    // While older mail comes down, "ready" carries how far along it is.
+    this.#setStatus("ready", failedOpsMessage(this.#deps.syncStore.failedCount(this.accountId)), this.#olderProgress, lastSyncAt);
   }
 
   // ── Connection loop ───────────────────────────────────────────────────────────────────────
@@ -466,6 +498,8 @@ export class AccountWorker {
     }
     this.#retriedToken = false;
     this.#client = client;
+    this.#older = null;
+    this.#olderProgress = null;
     this.#gmail = client.capabilities.has("X-GM-EXT-1");
     this.#deps.syncStore.makeDueNow(this.accountId);
     this.#wantOutbox = true;
@@ -554,8 +588,10 @@ export class AccountWorker {
       this.#attachments.size > 0 ||
       this.#urgentBodies.size > 0 ||
       this.#wantOutbox ||
+      this.#serverSearch !== null ||
       this.#wantPass ||
-      this.#prefetch.length > 0
+      this.#prefetch.length > 0 ||
+      this.#olderMailboxes().length > 0
     );
   }
 
@@ -563,6 +599,7 @@ export class AccountWorker {
     if (this.#attachments.size > 0) return () => this.#runAttachments(client);
     if (this.#urgentBodies.size > 0) return () => this.#runUrgentBodies(client);
     if (this.#wantOutbox) return () => this.#drainOutbox(client);
+    if (this.#serverSearch !== null) return () => this.#runServerSearch(client);
     if (this.#wantPass) {
       return async () => {
         this.#wantPass = false;
@@ -572,7 +609,142 @@ export class AccountWorker {
       };
     }
     if (this.#prefetch.length > 0) return () => this.#runPrefetch(client);
+    // Last: older mail, a batch at a time, so anything else can go first between batches.
+    if (this.#olderMailboxes().length > 0) return () => this.#runOlder(client);
     return null;
+  }
+
+  /**
+   * Gmail's own search (X-GM-RAW, the same as the search box in Gmail) over All Mail. The newest
+   * matches that aren't here come down, and their text with them, so the local search finds them.
+   */
+  async #runServerSearch(client: ImapFlow): Promise<void> {
+    const text = this.#serverSearch;
+    this.#serverSearch = null;
+    if (!text || !this.#gmail) return;
+    if (this.#serverSearched.size > 200) this.#serverSearched.clear();
+    this.#serverSearched.set(text, Date.now());
+    const all = this.#deps.store.mailboxes.byRole(this.accountId, "all");
+    if (!all || !this.#serverPaths.has(all.path)) return;
+    let ids: string[] = [];
+    const lock = await client.getMailboxLock(all.path);
+    try {
+      let found: number[] | false | undefined;
+      try {
+        found = await client.search({ gmraw: text }, { uid: true });
+      } catch (error) {
+        if (isNetworkError(error) || !client.usable) throw error;
+        this.#log.warn("Gmail's search failed", { error: error instanceof Error ? error.message : String(error) });
+        return;
+      }
+      if (!Array.isArray(found) || found.length === 0) return;
+      const newest = found.sort((a, b) => b - a).slice(0, SERVER_SEARCH_MAX);
+      const known = this.#deps.syncStore.uidMap(all.id);
+      const unknown = newest.filter((u) => !known.has(u));
+      if (unknown.length > 0) {
+        const ctx = this.#newContext(true);
+        await this.#fetchHeadersLocked(client, all, unknown, ctx);
+        this.#flush(ctx);
+      }
+      const map = this.#deps.syncStore.uidMap(all.id);
+      ids = newest.flatMap((u) => {
+        const id = map.get(u);
+        return id ? [id] : [];
+      });
+      this.#log.info("Gmail's search", { found: found.length, new: unknown.length });
+    } finally {
+      lock.release();
+    }
+    // Their text, so the words match here too (not the huge ones: their headers are enough).
+    const wanted = this.#deps.store.messages.byIds(ids).filter((m) => m.bodyState !== "ready" && m.size <= PREFETCH_MAX_BYTES);
+    if (wanted.length > 0) this.requestBodies(wanted.map((m) => m.id));
+  }
+
+  // ── Older mail ────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Mailboxes whose mail from before the first sync's window isn't all here yet. Trash and Spam
+   * are left as they are: old mail there isn't worth the download.
+   */
+  #olderMailboxes(): MailboxRecord[] {
+    const info = (this.#deps.store.accounts.getSyncState(this.accountId) ?? {}) as AccountSyncInfo;
+    if (!info.initialDone) return [];
+    return this.#syncedMailboxes().filter((m) => {
+      if (m.role === "trash" || m.role === "spam") return false;
+      const state = (m.sync ?? {}) as MailboxSyncState;
+      return state.initialDone === true && state.backfillDone !== true;
+    });
+  }
+
+  /** Finds what's missing in every mailbox once per connection; then downloads one batch. */
+  async #runOlder(client: ImapFlow): Promise<void> {
+    const boxes = this.#olderMailboxes();
+    if (!this.#older) {
+      const older = new Map<string, number[]>();
+      for (const box of boxes) {
+        const state = (box.sync ?? {}) as MailboxSyncState;
+        const cursor = state.backfillCursor;
+        let uids: number[] = [];
+        if (cursor !== null && cursor !== undefined && cursor > 1) {
+          try {
+            const lock = await client.getMailboxLock(box.path);
+            try {
+              const found = await client.search({ uid: `1:${cursor - 1}` }, { uid: true });
+              const known = this.#deps.syncStore.uidMap(box.id);
+              uids = (Array.isArray(found) ? found : []).filter((u) => u < cursor && !known.has(u)).sort((a, b) => b - a);
+            } finally {
+              lock.release();
+            }
+          } catch (error) {
+            if (isNetworkError(error) || !client.usable) throw error;
+            // A folder the server won't search: leave its older mail, don't retry forever.
+            this.#log.warn("couldn't look for older mail", { path: box.path, error: error instanceof Error ? error.message : String(error) });
+          }
+        }
+        older.set(box.id, uids);
+      }
+      this.#older = older;
+      const total = [...older.values()].reduce((n, u) => n + u.length, 0);
+      if (total > 0) {
+        this.#olderProgress = { done: 0, total };
+        this.#log.info("downloading older mail", { messages: total });
+      }
+    }
+
+    const box = boxes[0];
+    if (!box) return;
+    const queue = this.#older.get(box.id);
+    if (!queue) {
+      // A mailbox that is new or was reset since the list was made: look again.
+      this.#older = null;
+      return;
+    }
+    if (queue.length === 0) {
+      // Nothing (more) to get here: done for good, unless the mailbox is reset.
+      const fresh = this.#deps.store.mailboxes.get(box.id);
+      if (fresh) this.#deps.store.mailboxes.update(box.id, { sync: { ...(fresh.sync ?? {}), backfillDone: true } as Record<string, unknown> });
+      this.#older.delete(box.id);
+      if (this.#olderMailboxes().length === 0 && this.#olderProgress) {
+        this.#log.info("older mail is all here", { messages: this.#olderProgress.total });
+        this.#olderProgress = null;
+        this.#setReady();
+      }
+      return;
+    }
+    const slice = queue.splice(0, BATCH);
+    const ctx = this.#newContext(true);
+    await this.#fetchAndStore(client, box, slice, ctx);
+    this.#flush(ctx);
+    const fresh = this.#deps.store.mailboxes.get(box.id);
+    if (fresh) {
+      const state = (fresh.sync ?? {}) as MailboxSyncState;
+      const lowest = Math.min(...slice, state.backfillCursor ?? Number.MAX_SAFE_INTEGER);
+      this.#deps.store.mailboxes.update(box.id, { sync: { ...state, backfillCursor: lowest } as Record<string, unknown> });
+    }
+    if (this.#olderProgress) {
+      this.#olderProgress = { ...this.#olderProgress, done: Math.min(this.#olderProgress.total, this.#olderProgress.done + slice.length) };
+      if (this.#state === "ready") this.#setReady();
+    }
   }
 
   /** Between batches of a long sync: what someone is waiting for goes first. */
@@ -748,6 +920,8 @@ export class AccountWorker {
   #finishMailbox(mailbox: MailboxRecord, info: MailboxObject, uids: number[], reset: boolean): void {
     const fresh = this.#deps.store.mailboxes.get(mailbox.id);
     if (!fresh) return;
+    // What's missing is looked up again (the window may have moved).
+    this.#older = null;
     // After a UIDVALIDITY reset, locations that were not found again are gone from the server.
     if (reset) {
       const dropped = this.#deps.syncStore.dropLocationsWithoutUid(mailbox.id);
@@ -760,6 +934,8 @@ export class AccountWorker {
       initialDone: true,
       resetPending: false,
       backfillCursor: lowest,
+      // Older mail than the window comes down again (the mailbox may be new or reset).
+      backfillDone: false,
       lastExists: info.exists,
       passes: 0,
     };

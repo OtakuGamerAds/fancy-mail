@@ -265,6 +265,14 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
       }
     },
 
+    searchServer({ text, accountIds }) {
+      for (const accountId of accountIds) {
+        const account = store.accounts.get(accountId);
+        if (!account || account.isDemo || account.paused) continue;
+        ensureWorker(accountId)?.searchServer(text);
+      }
+    },
+
     async downloadAttachment(attachmentId) {
       const att = store.messages.attachment(attachmentId);
       if (!att) throw new AppError("not_found", "This attachment's message was deleted.");

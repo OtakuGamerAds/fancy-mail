@@ -105,7 +105,10 @@ export function statusText(account: Account): string {
     case "paused":
       return account.provider === "demo" ? "Demo account" : "Paused";
     case "ready":
-      return "Up to date";
+      // Older mail still coming down in the background.
+      return progress && progress.total > 0
+        ? `Up to date · getting older mail ${progress.done.toLocaleString()} of ${progress.total.toLocaleString()}`
+        : "Up to date";
     default:
       return "Waiting to sync";
   }

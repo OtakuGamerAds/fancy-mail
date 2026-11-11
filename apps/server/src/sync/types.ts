@@ -21,6 +21,12 @@ export interface SyncEngine {
   stop(): Promise<void>;
   /** Download these bodies soon (newest first); a `threads` invalidation follows. */
   requestBodies(messageIds: string[]): void;
+  /**
+   * Asks the mail servers (Gmail) for mail with these words, for what isn't fully here: mail
+   * older than what's downloaded, or whose text isn't. What it finds downloads, and a `threads`
+   * invalidation follows, so the search shows it.
+   */
+  searchServer(input: { text: string; accountIds: string[] }): void;
   /** Resolves to a local path once the file is on this computer. */
   downloadAttachment(attachmentId: string): Promise<string>;
   /** New outbox ops were enqueued for this account. */

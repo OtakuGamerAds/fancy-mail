@@ -124,6 +124,29 @@ export function createThreadsService(env: ServiceEnv) {
     return { compiled, errors: [...parsed.errors, ...compiled.errors], parsed, lookups, visible };
   }
 
+  /**
+   * Words searched for: the mail servers are asked too (Gmail searches all the mail and its
+   * text, more than is downloaded here). What they find comes down and the list updates.
+   */
+  function askServers(parsed: ReturnType<typeof parseQuery>, visible: string[] | null): void {
+    const quote = (w: string) => (/\s/.test(w) ? `"${w.replace(/"/g, "")}"` : w);
+    // Words and from:/to:/cc:/subject:/filename: mean the same in Gmail's search.
+    const parts = parsed.terms.flatMap((t) => {
+      if ((t.kind !== "text" && t.kind !== "field") || t.negated) return [];
+      const value = t.value.trim();
+      if (!value) return [];
+      return [t.kind === "field" ? `${t.field}:${quote(value)}` : quote(value)];
+    });
+    const text = parts.join(" ");
+    if (text.length < 2) return;
+    const accountIds = visible ?? store.accounts.list().map((a) => a.id);
+    try {
+      env.sync().searchServer({ text, accountIds });
+    } catch (error) {
+      env.log.warn("could not ask the mail servers", { error });
+    }
+  }
+
   const service = {
     search(input: { query: string; cursor?: string | null; limit?: number }, ctx: CallContext): SearchResult {
       const limit = Math.max(1, Math.min(500, input.limit ?? DEFAULT_LIMIT));
@@ -140,6 +163,7 @@ export function createThreadsService(env: ServiceEnv) {
         const scan = compileQuery(parsed, lookups, { ...(visible ? { visibleAccountIds: visible } : {}), textScan: true });
         list = { where: scan.where, params: scan.params as SqlValue[] };
       }
+      if (!input.cursor) askServers(parsed, visible);
       const { rows, total } = store.threads.search(list, { where: compiled.where, params: compiled.params as SqlValue[] }, { after, limit: limit + 1 });
       const page = rows.slice(0, limit);
       const labels = store.threads.labelIds(page.map((r) => r.id));

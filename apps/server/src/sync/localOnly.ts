@@ -125,6 +125,9 @@ export function createLocalOnlySync(deps: SyncDeps): SyncEngine {
     requestBodies() {
       // Demo bodies are stored with the messages.
     },
+    searchServer() {
+      // Demo mail is all here.
+    },
     async downloadAttachment(attachmentId) {
       const att = store.messages.attachment(attachmentId);
       if (att?.localPath && fs.existsSync(att.localPath)) return att.localPath;
