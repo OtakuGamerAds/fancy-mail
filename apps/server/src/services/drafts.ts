@@ -37,6 +37,42 @@ function quoted(subject: string): string {
 export function createDraftsService(env: ServiceEnv) {
   const { store } = env;
 
+  /** Sends waiting out their Undo time (in memory: quitting the app cancels them). */
+  const waiting = new Map<string, { timer: ReturnType<typeof setTimeout>; at: number; ctx: CallContext }>();
+
+  function out(d: DraftRecord): Draft {
+    return { ...toContractDraft(d), sendAt: waiting.get(d.id)?.at ?? null };
+  }
+
+  function stopWaiting(id: string): { ctx: CallContext } | null {
+    const w = waiting.get(id);
+    if (!w) return null;
+    clearTimeout(w.timer);
+    waiting.delete(id);
+    return w;
+  }
+
+  /** Hands a queued draft to the sync engine, and logs it as sent. */
+  function dispatch(id: string, ctx: CallContext): void {
+    waiting.delete(id);
+    const draft = store.drafts.get(id);
+    if (!draft || draft.sendState !== "queued") return;
+    const recipients = [...draft.to, ...draft.cc, ...draft.bcc];
+    const to = recipients[0];
+    const others = recipients.length > 1 ? ` and ${recipients.length - 1} more` : "";
+    const activity = writeActivity(env, {
+      actor: ctx.actor,
+      summary: `Sent ${quoted(draft.subject)} to ${to ? to.name || to.address : "nobody"}${others}${isAgent(ctx) ? ` (for you, by ${agentDisplayName(ctx.actor.kind === "agent" ? ctx.actor.name : "")})` : ""}`,
+      kind: "send",
+      threadIds: [draft.threadId],
+      accountIds: [draft.accountId],
+      undo: null,
+    });
+    invalidate(env, ["activity"]);
+    env.bus.publish({ type: "activity", activity });
+    env.sync().sendDraft(id);
+  }
+
   function requireDraft(id: string, ctx: CallContext): { draft: DraftRecord; account: AccountRecord } {
     const draft = store.drafts.get(id);
     const account = draft ? store.accounts.get(draft.accountId) : null;
@@ -73,7 +109,7 @@ export function createDraftsService(env: ServiceEnv) {
 
   const service = {
     get(id: string, ctx: CallContext): Draft {
-      return toContractDraft(requireDraft(id, ctx).draft);
+      return out(requireDraft(id, ctx).draft);
     },
 
     record(id: string): DraftRecord | null {
@@ -184,7 +220,7 @@ export function createDraftsService(env: ServiceEnv) {
         invalidate(env, ["activity"]);
         env.bus.publish({ type: "activity", activity });
       }
-      return toContractDraft(record);
+      return out(record);
     },
 
     delete(id: string, ctx: CallContext): void {
@@ -195,6 +231,7 @@ export function createDraftsService(env: ServiceEnv) {
 
     /** Removes a draft row (and its server copy later); used by delete and undo. */
     discard(draft: DraftRecord): void {
+      stopWaiting(draft.id);
       env.db.tx(() => {
         store.drafts.delete(draft.id);
         store.refreshThreads([draft.threadId]);
@@ -211,10 +248,10 @@ export function createDraftsService(env: ServiceEnv) {
       publish(draft.threadId);
     },
 
-    send(id: string, ctx: CallContext): Draft {
+    send(id: string, ctx: CallContext, options: { undoable?: boolean } = {}): Draft {
       const { draft, account } = requireDraft(id, ctx);
       requireAccess(ctx, account, "send", "sending mail");
-      if (draft.sendState === "queued" || draft.sendState === "sending") return toContractDraft(draft);
+      if (draft.sendState === "queued" || draft.sendState === "sending") return out(draft);
       const recipients = [...draft.to, ...draft.cc, ...draft.bcc];
       if (recipients.length === 0) throw new AppError("bad_request", "Add at least one recipient before sending.");
       const bad = recipients.find((a) => !isValidEmail(a.address));
@@ -224,24 +261,56 @@ export function createDraftsService(env: ServiceEnv) {
           throw new AppError("bad_request", `The attachment ${a.filename} isn't available any more. Attach it again.`);
         }
       }
-      const to = recipients[0]!;
-      const others = recipients.length > 1 ? ` and ${recipients.length - 1} more` : "";
-      const activity = env.db.tx(() => {
-        store.drafts.setSendState(draft.id, "queued", null);
-        return writeActivity(env, {
-          actor: ctx.actor,
-          summary: `Sent ${quoted(draft.subject)} to ${to.name || to.address}${others}${isAgent(ctx) ? ` (for you, by ${agentDisplayName(ctx.actor.kind === "agent" ? ctx.actor.name : "")})` : ""}`,
-          kind: "send",
-          threadIds: [draft.threadId],
-          accountIds: [account.id],
-          undo: null,
-        });
-      });
+      store.drafts.setSendState(draft.id, "queued", null);
+      const wait = options.undoable && !isAgent(ctx) ? store.settings.get().undoSendSeconds * 1000 : 0;
+      if (wait > 0) {
+        const timer = setTimeout(() => dispatch(draft.id, ctx), wait);
+        timer.unref?.();
+        waiting.set(draft.id, { timer, at: Date.now() + wait, ctx });
+      }
       publish(draft.threadId);
-      invalidate(env, ["activity"]);
-      env.bus.publish({ type: "activity", activity });
-      env.sync().sendDraft(draft.id);
-      return toContractDraft(store.drafts.get(draft.id)!);
+      const result = out(store.drafts.get(draft.id)!);
+      if (wait === 0) dispatch(draft.id, ctx);
+      return result;
+    },
+
+    /** Undo send: stops a send that is still waiting; the message is a draft again. */
+    cancelSend(id: string, ctx: CallContext): Draft {
+      const { draft, account } = requireDraft(id, ctx);
+      requireAccess(ctx, account, "send", "stopping a send");
+      if (!stopWaiting(draft.id)) {
+        if (draft.sendState === "queued" || draft.sendState === "sending") {
+          throw new AppError("conflict", "Too late: it's already on its way.");
+        }
+        return out(draft);
+      }
+      store.drafts.setSendState(draft.id, "draft", null);
+      publish(draft.threadId);
+      return out(store.drafts.get(draft.id)!);
+    },
+
+    /** Sends a waiting message now. */
+    sendNow(id: string, ctx: CallContext): void {
+      const { draft, account } = requireDraft(id, ctx);
+      requireAccess(ctx, account, "send", "sending mail");
+      const w = stopWaiting(draft.id);
+      if (w) dispatch(draft.id, w.ctx);
+    },
+
+    /**
+     * At startup: sends that were waiting when the app quit didn't go out, so they are drafts
+     * again; one that was mid-send may or may not have left.
+     */
+    recoverInterrupted(): void {
+      const stuck = store.drafts.list(null).filter((d) => d.sendState === "queued" || d.sendState === "sending");
+      if (stuck.length === 0) return;
+      env.db.tx(() => {
+        for (const d of stuck) {
+          if (d.sendState === "queued") store.drafts.setSendState(d.id, "draft", null);
+          else store.drafts.setSendState(d.id, "failed", "Fancy Mail closed while this was being sent. Check Sent before sending it again.");
+        }
+      });
+      invalidate(env, ["drafts", "threads"]);
     },
 
     /** Sync engine: the draft is going out now. */

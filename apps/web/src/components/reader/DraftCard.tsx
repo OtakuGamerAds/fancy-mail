@@ -9,6 +9,7 @@ import { useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
+import { showSendToast } from "~/components/compose/sendToast";
 import { toast } from "~/components/ui/toast";
 import { displayName } from "~/lib/addresses";
 import { actorLabel } from "~/lib/agents";
@@ -35,8 +36,7 @@ export function DraftCard({ draft, threadId }: { draft: Draft; threadId: string 
   const send = async () => {
     setBusy("send");
     try {
-      await rpc("drafts.send", { draftId: draft.id });
-      toast.show({ id: `send-${draft.id}`, type: "loading", title: "Sending…", duration: 0 });
+      showSendToast(await rpc("drafts.send", { draftId: draft.id, undoable: true }));
       refresh();
     } catch (error) {
       toast.error("Couldn't send the draft", errorMessage(error));

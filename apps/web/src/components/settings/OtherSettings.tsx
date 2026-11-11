@@ -27,6 +27,15 @@ const TAB_NAMES: Record<InboxTab, { title: string; description: string }> = {
   forums: { title: "Forums", description: "Mailing lists, groups and discussion boards." },
 };
 
+const UNDO_SEND_CHOICES = [
+  { value: "0", label: "Off" },
+  { value: "5", label: "5 seconds" },
+  { value: "10", label: "10 seconds" },
+  { value: "15", label: "15 seconds" },
+  { value: "20", label: "20 seconds" },
+  { value: "30", label: "30 seconds" },
+];
+
 // ── Reading ─────────────────────────────────────────────────────────────────────────────────
 
 export function ReadingSettings() {
@@ -35,6 +44,21 @@ export function ReadingSettings() {
   const { settings } = bootstrap;
   return (
     <>
+      <SettingsSection title="Sending">
+        <SettingsRow
+          title="Undo send"
+          description="How long a message waits after Send, so you can take it back. It goes out even if you close the window; quitting Fancy Mail keeps it as a draft."
+          control={
+            <FieldSelect
+              items={UNDO_SEND_CHOICES}
+              value={String(settings.undoSendSeconds)}
+              onChange={(value) => void updateSettings({ undoSendSeconds: Number(value) })}
+              ariaLabel="Undo send"
+              size="sm"
+            />
+          }
+        />
+      </SettingsSection>
       <SettingsSection title="Reading">
         <SettingsRow
           title="Reading pane"

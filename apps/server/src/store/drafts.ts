@@ -67,6 +67,7 @@ export function toContractDraft(d: DraftRecord): Draft {
     updatedAt: d.updatedAt,
     sendState: d.sendState,
     sendError: d.sendError,
+    sendAt: null,
   };
 }
 

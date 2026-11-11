@@ -93,6 +93,7 @@ export async function createServer(config: ServerConfig, options: CreateServerOp
 
     const sync = (options.createSync ?? createSyncEngine)({ db, store, services, bus, vault, config, log: log.child("sync") });
     services.attachSync(sync);
+    services.drafts.recoverInterrupted();
 
     const auth = createAuth({ token: config.sessionToken, dev: config.dev });
     log.addSecret(auth.token);

@@ -214,6 +214,9 @@ const activity = [
   { id: id("act"), at: now - 26 * H, actor: { kind: "agent", name: "t3code" }, summary: "Archived 40 newsletters", kind: "archive", threadIds: ["t_7"], undoable: true, undoneAt: now - 25 * H },
 ];
 
+/** Sends waiting out their Undo time: draftId → { timer, go }. */
+const sendWaits = new Map();
+
 let settings = {
   readingPane: "right",
   density: "comfortable",
@@ -221,6 +224,7 @@ let settings = {
   allowedImageSenders: [],
   closeToTray: true,
   notifications: false,
+  undoSendSeconds: 15,
   inboxTabs: ["promotions", "social", "forums"],
   defaultAgentAccess: "draft",
   mcp: { enabled: true, port: 47821 },
@@ -510,7 +514,7 @@ const handlers = {
   "drafts.save": ({ draft }) => {
     let d = draft.id ? drafts.find((x) => x.id === draft.id) : null;
     if (!d) {
-      d = { id: id("d"), conversationId: draft.threadId ?? id("t"), createdBy: { kind: "user" }, sendState: "draft", sendError: null };
+      d = { id: id("d"), conversationId: draft.threadId ?? id("t"), createdBy: { kind: "user" }, sendState: "draft", sendError: null, sendAt: null };
       drafts.push(d);
     }
     Object.assign(d, draft, { id: d.id, updatedAt: Date.now() });
@@ -527,17 +531,43 @@ const handlers = {
     broadcast({ type: "invalidate", topics: ["drafts", "threads"] });
     return {};
   },
-  "drafts.send": ({ draftId }) => {
+  "drafts.send": ({ draftId, undoable }) => {
     const d = drafts.find((x) => x.id === draftId);
     d.sendState = "queued";
-    setTimeout(() => {
-      d.sendState = "sent";
-      const t = threads.find((x) => x.id === d.threadId);
-      if (t) t.draftCount = Math.max(0, t.draftCount - 1);
-      broadcast({ type: "draftSent", draftId, ok: true, error: null });
-      broadcast({ type: "invalidate", topics: ["drafts", "threads"] });
-    }, 1200);
+    const wait = undoable ? settings.undoSendSeconds * 1000 : 0;
+    const go = () => {
+      d.sendAt = null;
+      setTimeout(() => {
+        d.sendState = "sent";
+        const t = threads.find((x) => x.id === d.threadId);
+        if (t) t.draftCount = Math.max(0, t.draftCount - 1);
+        broadcast({ type: "draftSent", draftId, ok: true, error: null });
+        broadcast({ type: "invalidate", topics: ["drafts", "threads"] });
+      }, 1200);
+    };
+    d.sendAt = wait > 0 ? Date.now() + wait : null;
+    if (wait > 0) sendWaits.set(draftId, { timer: setTimeout(() => { sendWaits.delete(draftId); go(); }, wait), go });
+    else go();
     return d;
+  },
+  "drafts.cancelSend": ({ draftId }) => {
+    const d = drafts.find((x) => x.id === draftId);
+    const w = sendWaits.get(draftId);
+    if (!w) throw new RpcError("conflict", "Too late: it's already on its way.");
+    clearTimeout(w.timer);
+    sendWaits.delete(draftId);
+    Object.assign(d, { sendState: "draft", sendAt: null });
+    broadcast({ type: "invalidate", topics: ["drafts", "threads"] });
+    return d;
+  },
+  "drafts.sendNow": ({ draftId }) => {
+    const w = sendWaits.get(draftId);
+    if (w) {
+      clearTimeout(w.timer);
+      sendWaits.delete(draftId);
+      w.go();
+    }
+    return {};
   },
   "activity.list": ({ cursor, limit = 50 }) => {
     const start = cursor ? Number(cursor) : 0;

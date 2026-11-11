@@ -93,7 +93,13 @@ function ReplyComposer({
   const [initial] = useState<DraftFields>(() =>
     draft ? fieldsFromDraft(draft, splitDraftBody) : replyFields(initialMode, detail, account, dir.ownAddresses),
   );
-  const editor = useDraftEditor(initial, { draftId: draft?.id ?? null });
+  const [liveDraftId, setLiveDraftId] = useState<string | null>(draft?.id ?? null);
+  const editor = useDraftEditor(initial, { draftId: draft?.id ?? null, onSaved: (saved) => setLiveDraftId(saved.id) });
+  const setEditingDraftId = useUi((s) => s.setEditingDraftId);
+  useEffect(() => {
+    setEditingDraftId(liveDraftId);
+    return () => setEditingDraftId(null);
+  }, [liveDraftId, setEditingDraftId]);
   const { fields, update } = editor;
   const [editingRecipients, setEditingRecipients] = useState(fields.mode === "forward" || fields.to.length === 0);
   const textRef = useRef<HTMLTextAreaElement>(null);

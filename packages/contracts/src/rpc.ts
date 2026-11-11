@@ -244,7 +244,12 @@ export const RPC_METHODS = {
   "drafts.save": { params: z.object({ draft: DraftInput }), result: Draft },
   "drafts.delete": { params: z.object({ draftId: z.string() }), result: Empty },
   /** Queues the draft; a `draftSent` event says how it went. */
-  "drafts.send": { params: z.object({ draftId: z.string() }), result: Draft },
+  /** `undoable`: wait the Undo send time first (Settings); agents always send at once. */
+  "drafts.send": { params: z.object({ draftId: z.string(), undoable: z.boolean().optional() }), result: Draft },
+  /** Stops a send that is still waiting; the message is a draft again. Fails once it went out. */
+  "drafts.cancelSend": { params: z.object({ draftId: z.string() }), result: Draft },
+  /** Sends a waiting message now instead of at the end of its wait. */
+  "drafts.sendNow": { params: z.object({ draftId: z.string() }), result: Empty },
 
   "activity.list": {
     params: z.object({

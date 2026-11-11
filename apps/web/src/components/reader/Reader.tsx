@@ -112,6 +112,7 @@ function initiallyExpanded(messages: Message[]): Set<string> {
 
 function ReaderContent({ detail, onClose, fullWidth }: { detail: ThreadDetail; onClose(): void; fullWidth: boolean }) {
   const dir = useDirectory();
+  const editingDraftId = useUi((s) => s.editingDraftId);
   const { thread } = detail;
   const account = dir.accountById.get(thread.accountId);
   const labels = thread.labelIds.map((id) => dir.labelById.get(id)).filter((l): l is NonNullable<typeof l> => !!l);
@@ -230,7 +231,7 @@ function ReaderContent({ detail, onClose, fullWidth }: { detail: ThreadDetail; o
               />
             );
           })}
-          {detail.drafts.map((draft) => (
+          {detail.drafts.filter((d) => d.id !== editingDraftId).map((draft) => (
             <DraftCard key={draft.id} draft={draft} threadId={thread.id} />
           ))}
           <ReplyArea detail={detail} />

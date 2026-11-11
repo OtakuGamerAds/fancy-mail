@@ -146,7 +146,7 @@ function fakeApi(levels: { business: AgentAccess; bank: AgentAccess }) {
     drafts: () => drafts,
     saveDraft: (input, actor) => {
       need(input.accountId, "draft", actor);
-      const draft: Draft = { ...input, id: input.id ?? `drf_${drafts.length + 1}`, conversationId: input.threadId ?? `thr_new_${drafts.length + 1}`, createdBy: actor, updatedAt: 0, sendState: "draft", sendError: null };
+      const draft: Draft = { ...input, id: input.id ?? `drf_${drafts.length + 1}`, conversationId: input.threadId ?? `thr_new_${drafts.length + 1}`, createdBy: actor, updatedAt: 0, sendState: "draft", sendError: null, sendAt: null };
       drafts.push(draft);
       return draft;
     },

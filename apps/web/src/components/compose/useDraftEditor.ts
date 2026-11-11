@@ -7,6 +7,7 @@ import type { Address, Draft, DraftAttachment, DraftMode } from "@fancy-mail/con
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { toast } from "~/components/ui/toast";
+import { showSendToast } from "./sendToast";
 import { errorMessage, rpc } from "~/rpc/client";
 import { qk, queryClient } from "~/state/queries";
 
@@ -172,8 +173,7 @@ export function useDraftEditor(initial: DraftFields, options: { draftId?: string
       const draftId = idRef.current;
       if (!draftId) throw new Error("The draft could not be saved.");
       closedRef.current = true;
-      await rpc("drafts.send", { draftId });
-      toast.show({ id: `send-${draftId}`, type: "loading", title: "Sending…", duration: 0 });
+      showSendToast(await rpc("drafts.send", { draftId, undoable: true }));
       void queryClient.invalidateQueries({ queryKey: qk.drafts });
       if (current.threadId) void queryClient.invalidateQueries({ queryKey: qk.thread(current.threadId) });
       return true;

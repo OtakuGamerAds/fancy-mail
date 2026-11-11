@@ -76,6 +76,8 @@ interface UiState {
   /** The label picker for the current selection or open conversation (the `l` key). */
   labelPickerFor: string[] | null;
   replyRequest: ReplyRequest | null;
+  /** The draft open in a reply box (its card above is hidden meanwhile). */
+  editingDraftId: string | null;
   /** Group or label being renamed inline in the sidebar. */
   renaming: { kind: "group" | "label" | "account"; id: string } | null;
   /** The newest activity time the person has seen (the footer's dot). */
@@ -110,6 +112,7 @@ interface UiState {
   closeLabelPicker(): void;
   requestReply(threadId: string, mode: ReplyRequest["mode"], draftId?: string | null): void;
   clearReplyRequest(): void;
+  setEditingDraftId(id: string | null): void;
   setRenaming(renaming: UiState["renaming"]): void;
   markActivitySeen(at: number): void;
   pushUndo(activityId: string): void;
@@ -148,6 +151,7 @@ export const useUi = create<UiState>()((set, get) => ({
   activitySheetOpen: false,
   labelPickerFor: null,
   replyRequest: null,
+  editingDraftId: null,
   renaming: null,
   activitySeenAt: stored.activitySeenAt,
   undoStack: [],
@@ -216,6 +220,7 @@ export const useUi = create<UiState>()((set, get) => ({
   closeLabelPicker: () => set({ labelPickerFor: null }),
   requestReply: (threadId, mode, draftId) => set({ replyRequest: { threadId, mode, draftId: draftId ?? null, nonce: ++nonce } }),
   clearReplyRequest: () => set({ replyRequest: null }),
+  setEditingDraftId: (editingDraftId) => set({ editingDraftId }),
   setRenaming: (renaming) => set({ renaming }),
   markActivitySeen(at) {
     if (at <= get().activitySeenAt) return;

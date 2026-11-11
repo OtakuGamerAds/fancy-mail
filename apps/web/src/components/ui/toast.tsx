@@ -5,7 +5,7 @@
  * the pointer is over it.
  */
 import { CircleAlertIcon, CircleCheckIcon, InfoIcon, SparklesIcon, XIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { create } from "zustand";
 
 import { buttonVariants } from "~/components/ui/button";
@@ -20,6 +20,7 @@ export interface ToastAction {
   /** Close the toast after the action (default true). */
   closes?: boolean;
   primary?: boolean;
+  icon?: ReactNode;
 }
 
 export interface ToastItem {
@@ -30,6 +31,8 @@ export interface ToastItem {
   actions?: ToastAction[] | undefined;
   /** ms; 0 keeps it until dismissed. */
   duration: number;
+  /** A countdown: the seconds left after the title, and a bar that empties. */
+  countdown?: { endsAt: number; total: number } | undefined;
   createdAt: number;
 }
 
@@ -58,6 +61,7 @@ export const toast = {
       title: input.title,
       description: input.description,
       actions: input.actions,
+      countdown: input.countdown,
       duration: input.duration ?? (input.type === "error" ? 8000 : 6000),
       createdAt: Date.now(),
     });
@@ -104,12 +108,13 @@ function ToastCard({ item, paused }: { item: ToastItem; paused: boolean }) {
     };
   }, [paused, item.id, item.duration, item.createdAt]);
 
+  const left = useCountdown(item.countdown);
   const Icon = item.type === "loading" || item.type === "plain" ? null : ICONS[item.type];
   return (
     <div
       role={item.type === "error" ? "alert" : "status"}
       data-type={item.type}
-      className="dropdown-glass pointer-events-auto relative w-full rounded-lg text-popover-foreground shadow-xl shadow-black/25 transition-[opacity,translate] duration-300 ease-out starting:translate-y-3 starting:opacity-0"
+      className="dropdown-glass pointer-events-auto relative w-full overflow-hidden rounded-lg text-popover-foreground shadow-xl shadow-black/25 transition-[opacity,translate] duration-300 ease-out starting:translate-y-3 starting:opacity-0"
     >
       <div className="absolute -top-1.5 -right-1.5 z-20">
         <button
@@ -141,7 +146,10 @@ function ToastCard({ item, paused }: { item: ToastItem; paused: boolean }) {
             </span>
           ) : null}
           <div className="min-w-0">
-            <div className="min-w-0 font-medium wrap-break-word">{item.title}</div>
+            <div className="min-w-0 font-medium wrap-break-word">
+              {item.title}
+              {left ? <span className="ms-1 text-muted-foreground tabular-nums">({Math.ceil(left.ms / 1000)})</span> : null}
+            </div>
             {item.description ? (
               <div className="mt-0.5 line-clamp-4 text-muted-foreground text-xs wrap-break-word">{item.description}</div>
             ) : null}
@@ -159,14 +167,34 @@ function ToastCard({ item, paused }: { item: ToastItem; paused: boolean }) {
                   if (action.closes !== false) toast.dismiss(item.id);
                 }}
               >
+                {action.icon}
                 {action.label}
               </button>
             ))}
           </div>
         ) : null}
       </div>
+      {left ? (
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-0.5 bg-white/[0.06]">
+          <div className="h-full bg-primary transition-[width] duration-200 ease-linear" style={{ width: `${(left.ms / left.total) * 100}%` }} />
+        </div>
+      ) : null}
     </div>
   );
+}
+
+/** Time left on a countdown toast, ticking; null when there is none (or it ran out). */
+function useCountdown(countdown: ToastItem["countdown"]): { ms: number; total: number } | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!countdown) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 200);
+    return () => clearInterval(timer);
+  }, [countdown]);
+  if (!countdown) return null;
+  const ms = countdown.endsAt - now;
+  return ms > 0 ? { ms, total: countdown.total } : null;
 }
 
 export function Toaster() {

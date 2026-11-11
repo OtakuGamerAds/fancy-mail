@@ -263,6 +263,12 @@ export const Draft = z.object({
   updatedAt: z.number(),
   sendState: DraftSendState,
   sendError: z.string().nullable(),
+  /**
+   * While a send can still be undone: when it goes out (ms since epoch). Null otherwise. It
+   * waits on the server, so closing the window doesn't stop it; quitting the app does (the
+   * message comes back as a draft).
+   */
+  sendAt: z.number().nullable(),
 });
 export type Draft = z.infer<typeof Draft>;
 
@@ -312,6 +318,8 @@ export const Settings = z.object({
   closeToTray: z.boolean(),
   /** Windows notifications for new mail in Primary (off by default). */
   notifications: z.boolean(),
+  /** Seconds a sent message waits, so it can be undone. 0 sends at once. */
+  undoSendSeconds: z.number().int().min(0).max(60),
   /** Gmail's inbox tabs shown above the inbox; mail of the others stays in Primary (as in Gmail). */
   inboxTabs: z.array(z.enum(INBOX_TABS)),
   /** What new accounts get. Each account has its own level after that. */
@@ -341,6 +349,7 @@ export const DEFAULT_SETTINGS: Settings = {
   allowedImageSenders: [],
   closeToTray: true,
   notifications: false,
+  undoSendSeconds: 15,
   inboxTabs: ["promotions", "social"],
   defaultAgentAccess: "draft",
   mcp: { enabled: true, port: 47821 },
