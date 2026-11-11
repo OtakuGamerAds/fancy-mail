@@ -16,7 +16,6 @@ import {
   MailPlusIcon,
   MessagesSquareIcon,
   OctagonAlertIcon,
-  RefreshCwIcon,
   SearchIcon,
   SearchXIcon,
   StarIcon,
@@ -44,7 +43,6 @@ import { formatCount } from "~/lib/format";
 import { splitDraftBody } from "~/lib/plainText";
 import { cn, plural } from "~/lib/utils";
 import { errorMessage } from "~/rpc/client";
-import { syncNow } from "~/state/actions";
 import { archiveOrInbox, runThreadCommand, spamOrNot, toggleRead, toggleStar, trashOrRestore } from "~/state/commands";
 import { listNav } from "~/state/listNav";
 import { openConversation } from "~/state/openConversation";
@@ -250,6 +248,28 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
     else ui.setSelection(threads.map((t) => t.id), threads[0]?.id ?? null);
   };
 
+  // Above the rows' checkboxes (same 0.5rem inset and 1.25rem cell as ThreadRow's).
+  const checkAll = (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={allChecked ? true : someChecked ? "mixed" : false}
+      aria-label={allChecked || someChecked ? "Uncheck all" : "Check all"}
+      title={allChecked || someChecked ? "Uncheck all" : "Check all loaded"}
+      disabled={threads.length === 0}
+      onClick={toggleAll}
+      className="grid w-5 shrink-0 cursor-pointer place-items-center self-stretch rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-40"
+    >
+      {someChecked ? (
+        <span className="grid size-4 place-items-center rounded-[.25rem] border border-primary bg-primary text-primary-foreground">
+          <span className="h-0.5 w-2 rounded-full bg-current" />
+        </span>
+      ) : (
+        <CheckboxMark checked={allChecked} />
+      )}
+    </button>
+  );
+
   const hideLabelId = view.kind === "label" ? view.labelId : null;
   const isPending = threadsQuery.isPending && query !== null;
   const showEmpty = !isPending && !threadsQuery.isError && threads.length === 0;
@@ -285,36 +305,13 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
                 </span>
               ) : null}
             </div>
-            <IconButton
-              label={info.scope.type === "account" ? "Sync this account" : "Sync now"}
-              onClick={() => syncNow(info.scope.type === "account" ? info.scope.accountId : undefined)}
-            >
-              <RefreshCwIcon />
-            </IconButton>
           </>
         )}
-        <button
-          type="button"
-          role="checkbox"
-          aria-checked={allChecked ? true : someChecked ? "mixed" : false}
-          aria-label={allChecked || someChecked ? "Uncheck all" : "Check all"}
-          title={allChecked || someChecked ? "Uncheck all" : "Check all loaded"}
-          disabled={threads.length === 0}
-          onClick={toggleAll}
-          className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-40"
-        >
-          {someChecked ? (
-            <span className="grid size-4 place-items-center rounded-[.25rem] border border-primary bg-primary text-primary-foreground">
-              <span className="h-0.5 w-2 rounded-full bg-current" />
-            </span>
-          ) : (
-            <CheckboxMark checked={allChecked} />
-          )}
-        </button>
       </div>
 
       {/* Filter chips, and the search that narrows this view */}
-      <div className={cn("flex shrink-0 items-center gap-1 px-3 pb-2", !showTabs && "border-border border-b")} role="tablist" aria-label="Filter">
+      <div className={cn("flex shrink-0 items-center gap-1 pb-2", showTabs ? "px-3" : "border-border border-b ps-2 pe-3")} role="tablist" aria-label="Filter">
+        {showTabs ? null : <span className="me-1 flex h-6 items-stretch">{checkAll}</span>}
         {FILTERS.map((f) => (
           <button
             key={f.id}
@@ -354,7 +351,7 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
         ) : null}
       </div>
       {showTabs && info.query !== null ? (
-        <InboxTabs tabs={["primary", ...shownTabs]} shown={shownTabs} active={tab} viewQuery={info.query} />
+        <InboxTabs tabs={["primary", ...shownTabs]} shown={shownTabs} active={tab} viewQuery={info.query} leading={checkAll} />
       ) : null}
       {queryErrors.length > 0 && threads.length > 0 ? (
         <ul className="shrink-0 space-y-0.5 border-border border-b px-3 py-1.5 text-warning-foreground/90 text-xs">
@@ -474,9 +471,22 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
 
 /** No account yet (a fresh install): what to do first. */
 /** Gmail's inbox tabs. Each one says how many unread conversations it has. */
-function InboxTabs({ tabs, shown, active, viewQuery }: { tabs: InboxTabId[]; shown: InboxTab[]; active: InboxTabId; viewQuery: string }) {
+function InboxTabs({
+  tabs,
+  shown,
+  active,
+  viewQuery,
+  leading,
+}: {
+  tabs: InboxTabId[];
+  shown: InboxTab[];
+  active: InboxTabId;
+  viewQuery: string;
+  leading: React.ReactNode;
+}) {
   return (
     <div role="tablist" aria-label="Inbox tabs" className="flex shrink-0 items-stretch gap-0.5 border-border border-b px-2">
+      <span className="me-1.5 flex">{leading}</span>
       {tabs.map((id) => (
         <InboxTabButton key={id} id={id} active={id === active} unreadQuery={`${viewQuery} is:unread ${inboxTabQuery(id, shown)}`} />
       ))}

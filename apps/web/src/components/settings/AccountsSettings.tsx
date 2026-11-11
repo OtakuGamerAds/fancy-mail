@@ -8,7 +8,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AGENT_ACCESS_INFO, AGENT_ACCESS_LEVELS, type Account, type AgentAccess } from "@fancy-mail/contracts";
@@ -24,6 +24,7 @@ import { formatRelative } from "~/lib/format";
 import { cn } from "~/lib/utils";
 import { reorderAccounts, syncNow, updateAccount } from "~/state/actions";
 import { useDirectory } from "~/state/queries";
+import { navigate } from "~/state/router";
 import { useUi } from "~/state/ui";
 import { SettingsSection } from "./layout";
 
@@ -39,6 +40,12 @@ export const ACCESS_CHOICES = AGENT_ACCESS_LEVELS.map((level) => ({
   label: AGENT_ACCESS_INFO[level].label,
   description: AGENT_ACCESS_INFO[level].description,
 }));
+
+/** Opens Settings › Accounts on one account. */
+export function openAccountSettings(accountId: string): void {
+  useUi.getState().setSettingsAccountId(accountId);
+  navigate({ page: "settings", section: "accounts" });
+}
 
 export function AccountsSettings() {
   const dir = useDirectory();
@@ -121,11 +128,29 @@ function AccountRow({ account }: { account: Account }) {
   const isDemo = account.provider === "demo";
   const needsSignIn = state === "auth-required";
   const busy = state === "syncing" || state === "connecting";
+  const wanted = useUi((s) => s.settingsAccountId === account.id);
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const [marked, setMarked] = useState(false);
+  useEffect(() => {
+    if (!wanted) return;
+    rowRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    setMarked(true);
+    useUi.getState().setSettingsAccountId(null);
+    const timer = setTimeout(() => setMarked(false), 1600);
+    return () => clearTimeout(timer);
+  }, [wanted]);
   return (
     <div
-      ref={setNodeRef}
+      ref={(el) => {
+        setNodeRef(el);
+        rowRef.current = el;
+      }}
       style={{ transform: CSS.Translate.toString(transform), transition, zIndex: isDragging ? 10 : undefined, position: "relative" }}
-      className={cn("flex flex-col gap-2 bg-card/40 px-3 py-3 sm:px-4", isDragging && "rounded-xl shadow-lg")}
+      className={cn(
+        "flex flex-col gap-2 bg-card/40 px-3 py-3 transition-[background-color,box-shadow] duration-500 sm:px-4",
+        isDragging && "rounded-xl shadow-lg",
+        marked && "bg-primary/10 shadow-[inset_0_0_0_1px_var(--ring)]",
+      )}
     >
       <div className="flex items-center gap-3">
         <button

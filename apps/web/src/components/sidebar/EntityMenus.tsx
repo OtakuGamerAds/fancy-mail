@@ -32,9 +32,9 @@ import {
 } from "~/components/ui/menu";
 import { syncNow, updateAccount, updateGroup, updateLabel } from "~/state/actions";
 import { useDirectory } from "~/state/queries";
-import { navigate } from "~/state/router";
 import { useUi } from "~/state/ui";
 import { startReconnect } from "~/components/dialogs/reconnect";
+import { openAccountSettings } from "~/components/settings/AccountsSettings";
 
 type Anchor = Element | { getBoundingClientRect(): DOMRect } | null;
 
@@ -150,7 +150,7 @@ export function AccountMenu({ account, menu }: { account: Account; menu: RowMenu
           Reconnect…
         </MenuItem>
       ) : null}
-      <MenuItem onClick={() => navigate({ page: "settings", section: "accounts" })}>
+      <MenuItem onClick={() => openAccountSettings(account.id)}>
         <CogIcon />
         Sender name & settings
       </MenuItem>

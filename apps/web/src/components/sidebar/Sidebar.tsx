@@ -13,6 +13,7 @@ import {
   MailIcon,
   MailsIcon,
   MoreHorizontalIcon,
+  Settings2Icon,
   OctagonAlertIcon,
   PaperclipIcon,
   PlusIcon,
@@ -35,6 +36,7 @@ import { cn } from "~/lib/utils";
 import { createGroup, createLabel, updateAccount, updateGroup, updateLabel } from "~/state/actions";
 import { useBootstrap, useDirectory, useDrafts } from "~/state/queries";
 import { navigate, viewKey, type ViewRef } from "~/state/router";
+import { openAccountSettings } from "~/components/settings/AccountsSettings";
 import { SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN, useUi } from "~/state/ui";
 import { useColumnResize } from "~/hooks/useColumnResize";
 import { AccountMenu, GroupMenu, LabelMenu, useRowMenu } from "./EntityMenus";
@@ -500,19 +502,20 @@ function AccountBlock({ account, handle, matches }: { account: Account; handle: 
                     <ChevronRightIcon className={cn("transition-transform", expanded && "rotate-90")} />
                   </RowIconButton>
                   <RowIconButton
-                    label="Account actions"
+                    label="Account settings"
                     onPointerDown={(event) => event.stopPropagation()}
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
-                      menu.openFrom(event.currentTarget);
+                      openAccountSettings(account.id);
                     }}
                   >
-                    <MoreHorizontalIcon />
+                    <Settings2Icon />
                   </RowIconButton>
                 </>
               }
               onContextMenu={menu.openAtPointer}
+              onDoubleClick={() => setRenaming({ kind: "account", id: account.id })}
               onActivate={() => go(view)}
             />
           }
