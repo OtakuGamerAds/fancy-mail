@@ -13,7 +13,7 @@ import { ConnectionPill } from "~/components/ConnectionPill";
 import { ConfirmDialogs } from "~/components/dialogs/ConfirmDialogs";
 import { LabelPickerDialog } from "~/components/LabelPicker";
 import { ThreadList } from "~/components/list/ThreadList";
-import { NoConversation, Reader } from "~/components/reader/Reader";
+import { Reader } from "~/components/reader/Reader";
 import { SettingsView } from "~/components/settings/SettingsView";
 import { ShortcutsDialog } from "~/components/ShortcutsDialog";
 import { Sidebar } from "~/components/sidebar/Sidebar";
@@ -161,40 +161,36 @@ function MailView({ view, threadId }: { view: ViewRef; threadId: string | null }
     navigateBackTo({ page: "mail", view, threadId: null });
   };
 
-  const twoColumns = readingPane === "right" && width >= LIST_MIN + READER_MIN;
+  // The reader column is there only while a conversation or a new message is open; otherwise
+  // the list takes the whole width.
+  const pane = compose ? (
+    <ComposePane compose={compose} fullWidth={false} />
+  ) : threadId ? (
+    <Reader key={threadId} threadId={threadId} onClose={close} fullWidth={false} />
+  ) : null;
+  const fits = readingPane === "right" && width >= LIST_MIN + READER_MIN;
+  const twoColumns = fits && pane !== null;
   const shownListWidth = Math.max(LIST_MIN, Math.min(listWidth, width - READER_MIN));
 
-  // One element in both layouts, so the width keeps being measured when it switches.
+  // The list stays in the same place in the tree in every layout, so opening or closing a
+  // conversation doesn't remount it (and lose its scroll position). The width keeps being
+  // measured on the outer element.
   return (
     <div ref={boxRef} className="flex h-full min-w-0 flex-1">
-      {twoColumns ? (
-        <>
-          <div className="relative h-full shrink-0 border-border border-r" style={{ width: shownListWidth }}>
-            <ThreadList view={view} rightmost={false} />
-            <div {...resize.handleProps} style={{ left: "100%" }} aria-label="Resize the list" />
-          </div>
-          <div className="h-full min-w-0 flex-1">
-            {compose ? (
-              <ComposePane compose={compose} fullWidth={false} />
-            ) : threadId ? (
-              <Reader key={threadId} threadId={threadId} onClose={close} fullWidth={false} />
-            ) : (
-              <NoConversation />
-            )}
-          </div>
-        </>
-      ) : (
-        // One column: the list, or the open conversation (or new message) in its place.
-        <div className="min-w-0 flex-1">
-          {compose ? (
-            <ComposePane compose={compose} fullWidth />
-          ) : threadId ? (
-            <Reader key={threadId} threadId={threadId} onClose={close} fullWidth />
-          ) : (
-            <ThreadList view={view} rightmost />
-          )}
+      {twoColumns || pane === null ? (
+        <div
+          className={twoColumns ? "relative h-full shrink-0 border-border border-r" : "h-full min-w-0 flex-1"}
+          style={twoColumns ? { width: shownListWidth } : undefined}
+        >
+          <ThreadList view={view} rightmost={!twoColumns} />
+          {twoColumns ? <div {...resize.handleProps} style={{ left: "100%" }} aria-label="Resize the list" /> : null}
         </div>
-      )}
+      ) : null}
+      {pane !== null ? (
+        <div className="h-full min-w-0 flex-1">
+          {twoColumns ? pane : compose ? <ComposePane compose={compose} fullWidth /> : <Reader key={threadId} threadId={threadId!} onClose={close} fullWidth />}
+        </div>
+      ) : null}
     </div>
   );
 }

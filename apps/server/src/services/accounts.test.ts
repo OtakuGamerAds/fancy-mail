@@ -43,6 +43,15 @@ describe("account names", () => {
     expect(from).not.toContain("Bank");
   });
 
+  it("lets the name in the app be emptied (the app shows the address then)", () => {
+    stack = createTestStack();
+    const { accountId } = addAccount(stack.store, { email: "anna@example.com", name: "Anna Weber" });
+    const cleared = stack.services.accounts.update({ accountId, displayName: "  " }, user);
+    expect(cleared.displayName).toBe("");
+    expect(cleared.senderName).toBe("Anna Weber");
+    expect(stack.services.accounts.resolve("")).toBeNull();
+  });
+
   it("only the user changes the sender name", () => {
     stack = createTestStack();
     const { accountId } = addAccount(stack.store, { email: "anna@example.com", access: "send" });

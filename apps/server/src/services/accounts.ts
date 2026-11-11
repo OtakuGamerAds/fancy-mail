@@ -97,7 +97,7 @@ export function createAccountsService(env: ServiceEnv, settings: () => { default
       const found =
         all.find((a) => a.id === emailOrNameOrId.trim()) ??
         all.find((a) => a.email.toLocaleLowerCase() === wanted) ??
-        all.find((a) => a.displayName.toLocaleLowerCase() === wanted) ??
+        all.find((a) => a.displayName !== "" && a.displayName.toLocaleLowerCase() === wanted) ??
         null;
       return found ? toAccount(found, store.accounts.unreadInboxCounts(store.settings.get().inboxTabs)) : null;
     },
@@ -233,8 +233,8 @@ export function createAccountsService(env: ServiceEnv, settings: () => { default
       }
       const groupId = input.groupId === undefined ? undefined : requireGroup(input.groupId);
       const color = validColor(input.color, "The account") ?? undefined;
+      // Empty: the app shows the address instead.
       const displayName = input.displayName?.trim();
-      if (displayName !== undefined && !displayName) throw new AppError("bad_request", "An account needs a name.");
       const senderName = input.senderName?.replace(/[\r\n]+/g, " ").trim();
       if (isAgent(ctx) && senderName !== undefined && senderName !== account.senderName) requireUser(ctx, "change the sender name");
       const pausedChanged = input.paused !== undefined && input.paused !== account.paused;

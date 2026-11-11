@@ -198,10 +198,9 @@ function AccountRow({ account }: { account: Account }) {
       <div className="grid gap-x-4 gap-y-2 ps-[3.25rem] sm:grid-cols-2">
         <NameField
           label="Name in Fancy Mail"
-          hint="Only you see it, in the sidebar and here."
+          hint="Only you see it. Leave it empty to show the address."
           value={account.displayName}
           placeholder={account.email}
-          required
           onCommit={(displayName) => void updateAccount(account.id, { displayName })}
         />
         {!isDemo ? (

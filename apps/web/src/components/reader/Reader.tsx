@@ -25,7 +25,7 @@ import { AccountAvatar, IconButton, LabelChip } from "~/components/common";
 import { ReplyArea } from "~/components/compose/ReplyComposer";
 import { LabelPickerPopover } from "~/components/LabelPicker";
 import { Button } from "~/components/ui/button";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "~/components/ui/empty";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { Skeleton } from "~/components/ui/skeleton";
 import { toast } from "~/components/ui/toast";
@@ -316,24 +316,6 @@ function Toolbar({ detail, onClose }: { detail: ThreadDetail; onClose(): void })
       <IconButton label="Close" shortcut="Esc" onClick={onClose}>
         <XIcon />
       </IconButton>
-    </div>
-  );
-}
-
-export function NoConversation() {
-  return (
-    <div className="flex h-full flex-col">
-      <div data-drag-region className="app-drag h-[var(--header-height)] shrink-0" />
-      <Empty size="compact" className="pb-[var(--header-height)]">
-        <EmptyHeader>
-          <EmptyMedia>
-            <MailIcon className="size-8 text-muted-foreground/40" strokeWidth={1.5} />
-          </EmptyMedia>
-          <EmptyDescription className="mt-3 text-muted-foreground/80">
-            Pick a conversation, or press <kbd className="rounded bg-white/[0.07] px-1 font-sans text-xs">j</kbd> to start at the top.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
     </div>
   );
 }

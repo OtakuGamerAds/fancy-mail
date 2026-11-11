@@ -125,12 +125,15 @@ export function InlineNameField({
   onCommit,
   onCancel,
   leading,
+  allowEmpty,
 }: {
   initial: string;
   placeholder: string;
   onCommit(name: string): void;
   onCancel(): void;
   leading?: ReactNode;
+  /** Commit an emptied name too (accounts then show their address). */
+  allowEmpty?: boolean;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   const done = useRef(false);
@@ -144,7 +147,7 @@ export function InlineNameField({
     if (done.current) return;
     done.current = true;
     const name = ref.current?.value.trim() ?? "";
-    if (commit && name && name !== initial) onCommit(name);
+    if (commit && (name || allowEmpty) && name !== initial) onCommit(name);
     else onCancel();
   };
   return (
