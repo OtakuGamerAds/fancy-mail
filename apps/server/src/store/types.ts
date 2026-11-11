@@ -26,6 +26,8 @@ export interface NewAccount {
   id: string;
   email: string;
   displayName: string;
+  /** Defaults to displayName. */
+  senderName?: string;
   username: string;
   provider: Provider;
   authKind: AuthKind;
@@ -47,6 +49,7 @@ export type AccountPatch = Partial<
     NewAccount,
     | "email"
     | "displayName"
+    | "senderName"
     | "username"
     | "provider"
     | "authKind"

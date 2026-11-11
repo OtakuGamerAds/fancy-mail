@@ -34,14 +34,14 @@ const groups = [
 
 const status = (state, message = null) => ({ state, message, lastSyncAt: now - 5 * 60_000, progress: state === "syncing" ? { done: 1240, total: 3800 } : null });
 const accounts = [
-  { id: "a_billing", email: "billing@brightwave.example", displayName: "Billing", provider: "gmail", groupId: "g_bank", color: "#10b981", status: status("ready") },
-  { id: "a_bank2", email: "konto@sparkasse-mail.example", displayName: "Sparkasse", provider: "imap", groupId: "g_bank", color: "#14b8a6", status: status("auth-required") },
-  { id: "a_yt", email: "brightwave.yt@mail.example", displayName: "YouTube channel", provider: "gmail", groupId: "g_chan", color: "#ef4444", status: status("syncing") },
-  { id: "a_twitch", email: "streams@brightwave.example", displayName: "Twitch", provider: "gmail", groupId: "g_chan", color: "#d946ef", status: status("ready") },
-  { id: "a_ads", email: "ads@brightwave.example", displayName: "Brightwave Ads", provider: "gmail", groupId: "g_biz", color: "#3b82f6", status: status("ready") },
-  { id: "a_support", email: "support@brightwave.example", displayName: "Support", provider: "imap", groupId: "g_biz", color: "#06b6d4", status: status("offline", "Can't reach imap.brightwave.example. Retrying by itself.") },
-  { id: "a_me", email: "alex@mail.example", displayName: "Alex", provider: "gmail", groupId: "g_pers", color: "#f97316", status: status("ready") },
-  { id: "a_old", email: "old.address@gmx.example", displayName: "Old GMX", provider: "imap", groupId: null, color: "#64748b", status: status("paused") },
+  { id: "a_billing", email: "billing@brightwave.example", displayName: "Billing", senderName: "Billing", provider: "gmail", groupId: "g_bank", color: "#10b981", status: status("ready") },
+  { id: "a_bank2", email: "konto@sparkasse-mail.example", displayName: "Sparkasse", senderName: "Sparkasse", provider: "imap", groupId: "g_bank", color: "#14b8a6", status: status("auth-required") },
+  { id: "a_yt", email: "brightwave.yt@mail.example", displayName: "YouTube channel", senderName: "YouTube channel", provider: "gmail", groupId: "g_chan", color: "#ef4444", status: status("syncing") },
+  { id: "a_twitch", email: "streams@brightwave.example", displayName: "Twitch", senderName: "Twitch", provider: "gmail", groupId: "g_chan", color: "#d946ef", status: status("ready") },
+  { id: "a_ads", email: "ads@brightwave.example", displayName: "Brightwave Ads", senderName: "Brightwave Ads", provider: "gmail", groupId: "g_biz", color: "#3b82f6", status: status("ready") },
+  { id: "a_support", email: "support@brightwave.example", displayName: "Support", senderName: "Support", provider: "imap", groupId: "g_biz", color: "#06b6d4", status: status("offline", "Can't reach imap.brightwave.example. Retrying by itself.") },
+  { id: "a_me", email: "alex@mail.example", displayName: "Alex", senderName: "Alex", provider: "gmail", groupId: "g_pers", color: "#f97316", status: status("ready") },
+  { id: "a_old", email: "old.address@gmx.example", displayName: "Old GMX", senderName: "Old GMX", provider: "imap", groupId: null, color: "#64748b", status: status("paused") },
 ].map((a, i) => ({
   authKind: a.provider === "gmail" ? "password" : "password",
   sortOrder: i,
@@ -470,7 +470,7 @@ const handlers = {
   "accounts.addWithPassword": async (p) => {
     await new Promise((r) => setTimeout(r, 900));
     if (p.password !== "right") throw new RpcError("auth_failed", "The server refused the password. Check it, or create a new app password.");
-    const a = { id: id("a"), email: p.email, displayName: p.displayName, provider: p.provider, authKind: "password", groupId: p.groupId ?? null, color: "#3b82f6", sortOrder: accounts.length, agentAccess: settings.defaultAgentAccess, signature: "", imap: p.imap, smtp: p.smtp, status: status("syncing"), createdAt: Date.now() };
+    const a = { id: id("a"), email: p.email, displayName: p.displayName, senderName: p.displayName, provider: p.provider, authKind: "password", groupId: p.groupId ?? null, color: "#3b82f6", sortOrder: accounts.length, agentAccess: settings.defaultAgentAccess, signature: "", imap: p.imap, smtp: p.smtp, status: status("syncing"), createdAt: Date.now() };
     accounts.push(a);
     broadcast({ type: "invalidate", topics: ["accounts"] });
     return { ...a, unreadInboxCount: 0 };

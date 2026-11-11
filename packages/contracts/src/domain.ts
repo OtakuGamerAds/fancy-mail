@@ -71,7 +71,10 @@ export type AccountStatus = z.infer<typeof AccountStatus>;
 export const Account = z.object({
   id: z.string(),
   email: z.string(),
+  /** The account's name inside Fancy Mail only (sidebar, settings). Never sent anywhere. */
   displayName: z.string(),
+  /** The name people see in the From line of mail sent from this account. */
+  senderName: z.string(),
   provider: Provider,
   authKind: AuthKind,
   groupId: z.string().nullable(),

@@ -451,7 +451,7 @@ function AccountBlock({ account, handle, matches }: { account: Account; handle: 
     return (
       <InlineNameField
         initial={account.displayName}
-        placeholder="Account name"
+        placeholder="Name in Fancy Mail"
         leading={<AccountAvatar account={account} />}
         onCommit={(displayName) => {
           setRenaming(null);

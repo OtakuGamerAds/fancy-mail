@@ -214,6 +214,8 @@ export const RPC_METHODS = {
     params: z.object({
       accountId: z.string(),
       displayName: z.string().optional(),
+      /** Empty: mail goes out with the address alone. */
+      senderName: z.string().optional(),
       color: z.string().optional(),
       groupId: z.string().nullable().optional(),
       agentAccess: AgentAccess.optional(),

@@ -22,6 +22,7 @@ function account(id: string, email: string, agentAccess: AgentAccess): Account {
     id,
     email,
     displayName: email.split("@")[0]!,
+    senderName: email.split("@")[0]!,
     provider: "demo",
     authKind: "none",
     groupId: null,

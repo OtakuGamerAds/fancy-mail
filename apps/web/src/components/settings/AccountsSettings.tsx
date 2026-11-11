@@ -8,6 +8,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
+import { useEffect, useState } from "react";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AGENT_ACCESS_INFO, AGENT_ACCESS_LEVELS, type Account, type AgentAccess } from "@fancy-mail/contracts";
@@ -17,6 +18,7 @@ import { AccountAvatar, ColorDot, IconButton, statusText } from "~/components/co
 import { startReconnect } from "~/components/dialogs/reconnect";
 import { FieldSelect } from "~/components/selects";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
 import { Spinner } from "~/components/ui/spinner";
 import { formatRelative } from "~/lib/format";
 import { cn } from "~/lib/utils";
@@ -193,7 +195,72 @@ function AccountRow({ account }: { account: Account }) {
           />
         </label>
       </div>
+      <div className="grid gap-x-4 gap-y-2 ps-[3.25rem] sm:grid-cols-2">
+        <NameField
+          label="Name in Fancy Mail"
+          hint="Only you see it, in the sidebar and here."
+          value={account.displayName}
+          placeholder={account.email}
+          required
+          onCommit={(displayName) => void updateAccount(account.id, { displayName })}
+        />
+        {!isDemo ? (
+          <NameField
+            label="Sender name"
+            hint="What people see when you email them."
+            value={account.senderName}
+            placeholder="Just the address"
+            onCommit={(senderName) => void updateAccount(account.id, { senderName })}
+          />
+        ) : null}
+      </div>
     </div>
+  );
+}
+
+/** A name saved on Enter or when leaving the field; Escape puts the old one back. */
+function NameField({
+  label,
+  hint,
+  value,
+  placeholder,
+  required,
+  onCommit,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+  placeholder: string;
+  required?: boolean;
+  onCommit(value: string): void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => {
+    const next = draft.trim();
+    if (next === value) return;
+    if (required && !next) return setDraft(value);
+    onCommit(next);
+  };
+  return (
+    <label className="block min-w-0 space-y-1">
+      <span className="block font-medium text-muted-foreground text-xs">{label}</span>
+      <Input
+        size="sm"
+        value={draft}
+        placeholder={placeholder}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Escape") {
+            setDraft(value);
+            requestAnimationFrame(() => (event.target as HTMLInputElement).blur());
+          }
+        }}
+      />
+      <span className="block text-muted-foreground/80 text-xs">{hint}</span>
+    </label>
   );
 }
 

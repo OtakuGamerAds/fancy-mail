@@ -67,7 +67,7 @@ export function createLocalOnlySync(deps: SyncDeps): SyncEngine {
         inReplyTo: source?.messageIdHeader ?? null,
         references,
         subject: draft.subject,
-        from: { name: account.displayName, address: account.email },
+        from: { name: account.senderName || null, address: account.email },
         to: draft.to,
         cc: draft.cc,
         bcc: draft.bcc,

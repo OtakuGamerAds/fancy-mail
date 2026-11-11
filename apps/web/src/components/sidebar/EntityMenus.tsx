@@ -99,7 +99,8 @@ export function AccountMenu({ account, menu }: { account: Account; menu: RowMenu
     <RowMenuShell menu={menu}>
       <MenuItem onClick={() => ui.setRenaming({ kind: "account", id: account.id })}>
         <PencilIcon />
-        Rename
+        <span className="flex-1">Rename</span>
+        <span className="text-muted-foreground text-xs">only here</span>
       </MenuItem>
       <ColorSubmenu value={account.color} onChange={(color) => color && void updateAccount(account.id, { color })} />
       <MenuSub>
@@ -151,7 +152,7 @@ export function AccountMenu({ account, menu }: { account: Account; menu: RowMenu
       ) : null}
       <MenuItem onClick={() => navigate({ page: "settings", section: "accounts" })}>
         <CogIcon />
-        Account settings
+        Sender name & settings
       </MenuItem>
       <MenuSeparator />
       <MenuItem variant="destructive" onClick={() => ui.openDialog({ type: "remove-account", accountId: account.id })}>

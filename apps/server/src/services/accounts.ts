@@ -23,6 +23,7 @@ export function createAccountsService(env: ServiceEnv, settings: () => { default
       id: a.id,
       email: a.email,
       displayName: a.displayName,
+      senderName: a.senderName,
       provider: a.provider,
       authKind: a.authKind,
       groupId: a.groupId,
@@ -214,6 +215,7 @@ export function createAccountsService(env: ServiceEnv, settings: () => { default
       input: {
         accountId: string;
         displayName?: string;
+        senderName?: string;
         color?: string;
         groupId?: string | null;
         agentAccess?: AgentAccess;
@@ -233,10 +235,13 @@ export function createAccountsService(env: ServiceEnv, settings: () => { default
       const color = validColor(input.color, "The account") ?? undefined;
       const displayName = input.displayName?.trim();
       if (displayName !== undefined && !displayName) throw new AppError("bad_request", "An account needs a name.");
+      const senderName = input.senderName?.replace(/[\r\n]+/g, " ").trim();
+      if (isAgent(ctx) && senderName !== undefined && senderName !== account.senderName) requireUser(ctx, "change the sender name");
       const pausedChanged = input.paused !== undefined && input.paused !== account.paused;
       env.db.tx(() => {
         store.accounts.update(account.id, {
           displayName,
+          senderName,
           color,
           groupId,
           sortOrder: groupId !== undefined && groupId !== account.groupId ? store.accounts.nextSortOrder(groupId) : undefined,

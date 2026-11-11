@@ -301,6 +301,18 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 4,
+    name: "sender name apart from the name shown in the app",
+    up: (db) => {
+      // display_name is now only the account's name inside the app; sender_name goes into the
+      // From line. Until now one name did both, so existing accounts start with it in both.
+      db.exec(`
+        ALTER TABLE accounts ADD COLUMN sender_name TEXT NOT NULL DEFAULT '';
+        UPDATE accounts SET sender_name = display_name;
+      `);
+    },
+  },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

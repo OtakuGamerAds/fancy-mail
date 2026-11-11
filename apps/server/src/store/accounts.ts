@@ -8,6 +8,7 @@ interface AccountRow {
   id: string;
   email: string;
   display_name: string;
+  sender_name: string;
   username: string;
   provider: string;
   auth_kind: string;
@@ -31,6 +32,7 @@ function toRecord(row: AccountRow): AccountRecord {
     id: row.id,
     email: row.email,
     displayName: row.display_name,
+    senderName: row.sender_name,
     username: row.username,
     provider: row.provider as Provider,
     authKind: row.auth_kind as AuthKind,
@@ -51,6 +53,7 @@ function toRecord(row: AccountRow): AccountRecord {
 const COLUMNS: Record<keyof AccountPatch, string> = {
   email: "email",
   displayName: "display_name",
+  senderName: "sender_name",
   username: "username",
   provider: "provider",
   authKind: "auth_kind",
@@ -88,12 +91,13 @@ export function createAccountsStore(db: Db) {
 
     insert(account: NewAccount): void {
       db.run(
-        `INSERT INTO accounts (id, email, display_name, username, provider, auth_kind, group_id, color, sort_order,
+        `INSERT INTO accounts (id, email, display_name, sender_name, username, provider, auth_kind, group_id, color, sort_order,
            agent_access, signature, imap_json, smtp_json, status_json, paused, is_demo, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         account.id,
         account.email,
         account.displayName,
+        account.senderName ?? account.displayName,
         account.username,
         account.provider,
         account.authKind,

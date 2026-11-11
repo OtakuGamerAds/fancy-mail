@@ -88,7 +88,7 @@ export function replyHeaders(draft: Pick<DraftRecord, "mode">, source: Pick<Mess
 }
 
 export async function buildMessage(input: {
-  account: Pick<AccountRecord, "email" | "displayName" | "signature">;
+  account: Pick<AccountRecord, "email" | "senderName" | "signature">;
   draft: DraftRecord;
   source: MessageRecord | null;
   files: OutgoingFile[];
@@ -101,7 +101,7 @@ export async function buildMessage(input: {
   const { inReplyTo, references } = replyHeaders(draft, input.source);
   const date = input.now ?? new Date();
   const mail = {
-    from: { name: account.displayName || account.email, address: account.email },
+    from: { name: account.senderName || account.email, address: account.email },
     to: draft.to.map(formatAddress),
     cc: draft.cc.map(formatAddress),
     bcc: draft.bcc.map(formatAddress),
@@ -163,7 +163,7 @@ export function storeSentMessage(input: {
       inReplyTo: built.inReplyTo,
       references: built.references,
       subject: draft.subject,
-      from: { name: account.displayName || null, address: account.email },
+      from: { name: account.senderName || null, address: account.email },
       to: draft.to,
       cc: draft.cc,
       bcc: draft.bcc,
