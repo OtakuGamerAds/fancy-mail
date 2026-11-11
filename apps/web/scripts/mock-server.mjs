@@ -509,6 +509,15 @@ const handlers = {
     return {};
   },
   "accounts.syncNow": () => ({}),
+  "contacts.suggest": ({ query, limit = 8 }) => {
+    const q = query.trim().toLowerCase();
+    const seen = new Map();
+    for (const t of threads) for (const p of t.participants ?? []) {
+      if (!p?.address || seen.has(p.address)) continue;
+      if ((p.name ?? "").toLowerCase().includes(q) || p.address.toLowerCase().includes(q)) seen.set(p.address, { name: p.name ?? null, address: p.address });
+    }
+    return [...seen.values()].slice(0, limit);
+  },
   "drafts.get": ({ draftId }) => drafts.find((d) => d.id === draftId) ?? (() => { throw new RpcError("not_found", "That draft is gone."); })(),
   "drafts.list": () => drafts.filter((d) => d.sendState !== "sent"),
   "drafts.save": ({ draft }) => {

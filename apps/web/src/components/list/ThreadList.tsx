@@ -47,7 +47,7 @@ import { archiveOrInbox, runThreadCommand, spamOrNot, toggleRead, toggleStar, tr
 import { listNav } from "~/state/listNav";
 import { openConversation } from "~/state/openConversation";
 import { useBootstrap, useDirectory, useDrafts, useSearchFacets, useThreads, type Directory } from "~/state/queries";
-import { viewKey, type ViewRef } from "~/state/router";
+import { currentRoute, navigateBackTo, viewKey, type ViewRef } from "~/state/router";
 import { useUi, type InboxTabId, type ListFilter } from "~/state/ui";
 import { describeView, inboxTabQuery, listQuery, searchWidens } from "~/state/view";
 
@@ -222,7 +222,15 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
         toggleCheck(event, thread);
         return;
       }
-      useUi.getState().setFocusZone("list");
+      const ui = useUi.getState();
+      ui.setFocusZone("list");
+      // Clicking the conversation that is open closes it (like its X).
+      const route = currentRoute();
+      if (route.page === "mail" && route.threadId === thread.id && !ui.compose) {
+        ui.setFocusedThread(thread.id);
+        navigateBackTo({ ...route, threadId: null });
+        return;
+      }
       openConversation(thread.id);
     },
     [toggleCheck],

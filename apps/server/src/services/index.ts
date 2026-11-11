@@ -17,6 +17,7 @@ import { createActivityService } from "./activity.ts";
 import type { EventBus } from "./bus.ts";
 import { requireUser } from "./context.ts";
 import type { CallContext } from "./context.ts";
+import { createContactsService } from "./contacts.ts";
 import { createDraftsService } from "./drafts.ts";
 import { invalidate } from "./env.ts";
 import type { ServiceEnv } from "./env.ts";
@@ -70,6 +71,7 @@ export function createServices(deps: ServicesDeps) {
   const uploads = createUploadsService(env);
   const activity = createActivityService(env, { labels, groups, drafts });
   const mcp = createMcpService(env);
+  const contacts = createContactsService(env);
 
   const demo = {
     seed(options: SeedOptions = {}): SeedSummary {
@@ -106,6 +108,7 @@ export function createServices(deps: ServicesDeps) {
     vault: deps.vault,
     settings,
     threads,
+    contacts,
     labels,
     groups,
     accounts,

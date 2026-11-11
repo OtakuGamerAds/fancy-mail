@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import {
   Account,
+  Address,
   Activity,
   AgentAccess,
   Draft,
@@ -110,6 +111,11 @@ const Empty = z.object({});
 export const RPC_METHODS = {
   "app.bootstrap": { params: Empty, result: Bootstrap },
 
+  /** To / Cc / Bcc suggestions: people in your mail whose name or address matches. */
+  "contacts.suggest": {
+    params: z.object({ query: z.string(), limit: z.number().int().min(1).max(20).optional() }),
+    result: z.array(Address),
+  },
   "threads.search": {
     params: z.object({
       query: z.string(),
