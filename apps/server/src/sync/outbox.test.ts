@@ -107,6 +107,14 @@ describe("IMAP outbox translation", () => {
       ["move", [5, 8]],
     ]);
   });
+
+  it("splits a big change into steps, keeping each message's commands together", () => {
+    const move = (uid: number) => ({ type: "move" as const, path: "[Gmail]/All Mail", uid, messageId: `m${uid}`, to: "[Gmail]/Trash", toMailboxId: "t" });
+    const commands = [1, 2, 3, 2, 4, 5].map(move);
+    const groups = groupCommands(commands, 2);
+    expect(groups.map((g) => g.items.map((i) => i.uid))).toEqual([[1, 2, 2], [3, 4], [5]]);
+    expect(groupCommands(Array.from({ length: 1201 }, (_, i) => move(i + 1))).map((g) => g.items.length)).toEqual([500, 500, 201]);
+  });
 });
 
 describe("retry schedules", () => {

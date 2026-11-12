@@ -123,8 +123,35 @@ export function planImapChange(change: OutboxMessageChange, copies: ServerCopy[]
   return out;
 }
 
-/** Commands that can run as one IMAP command (same kind, folder, target and flags). */
-export function groupCommands(commands: ImapCommand[]): { key: string; first: ImapCommand; items: ImapCommand[] }[] {
+/**
+ * The most messages one IMAP command acts on. Gmail fails a move of thousands at once (a big
+ * cleanup), and smaller steps also mean a retry starts where the last one stopped.
+ */
+export const MAX_UIDS_PER_COMMAND = 500;
+
+/**
+ * Commands that can run as one IMAP command (same kind, folder, target and flags), in steps of
+ * at most `maxUids` messages.
+ */
+export function groupCommands(
+  commands: ImapCommand[],
+  maxUids = MAX_UIDS_PER_COMMAND,
+): { key: string; first: ImapCommand; items: ImapCommand[] }[] {
+  return mergeCommands(commands).flatMap((group) => {
+    // Commands on the same message stay in the same step.
+    const byUid = new Map<number, ImapCommand[]>();
+    for (const item of group.items) byUid.set(item.uid, [...(byUid.get(item.uid) ?? []), item]);
+    const lists = [...byUid.values()];
+    const parts: { key: string; first: ImapCommand; items: ImapCommand[] }[] = [];
+    for (let i = 0; i < lists.length; i += maxUids) {
+      const items = lists.slice(i, i + maxUids).flat();
+      parts.push({ key: group.key, first: items[0]!, items });
+    }
+    return parts;
+  });
+}
+
+function mergeCommands(commands: ImapCommand[]): { key: string; first: ImapCommand; items: ImapCommand[] }[] {
   const groups = new Map<string, { key: string; first: ImapCommand; items: ImapCommand[] }>();
   for (const c of commands) {
     const key =

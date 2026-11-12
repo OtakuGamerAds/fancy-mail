@@ -65,6 +65,13 @@ const SERVER_SEARCH_DEBOUNCE_MS = 700;
 const SERVER_SEARCH_FRESH_MS = 10 * 60_000;
 /** How many of the server's newest matches are downloaded (with their text). */
 const SERVER_SEARCH_MAX = 60;
+/** Gmail message ids looked up in one search (OR'd X-GM-MSGID terms). */
+const GMAIL_IDS_PER_SEARCH = 100;
+
+/** A Gmail message id (X-GM-MSGID), as remoteId holds it for Gmail accounts. */
+function isGmailId(remoteId: string | null | undefined): boolean {
+  return !!remoteId && /^\d+$/.test(remoteId);
+}
 
 export interface WorkerDeps {
   db: Db;
@@ -1673,6 +1680,37 @@ export class AccountWorker {
     return null;
   }
 
+  /**
+   * Gmail: where these messages are now, by X-GM-MSGID, a hundred per search in each of All
+   * Mail, Trash and Spam. Messages it doesn't find are left out.
+   */
+  async #findManyOnGmail(client: ImapFlow, messages: Pick<MessageRecord, "id" | "remoteId">[]): Promise<Map<string, ServerCopy>> {
+    const found = new Map<string, ServerCopy>();
+    const wanted = new Map<string, string>();
+    for (const m of messages) if (isGmailId(m.remoteId)) wanted.set(m.remoteId!, m.id);
+    for (const box of this.#syncedMailboxes()) {
+      const ids = [...wanted.keys()].filter((id) => !found.has(wanted.get(id)!));
+      if (ids.length === 0) break;
+      const lock = await client.getMailboxLock(box.path);
+      try {
+        for (let i = 0; i < ids.length; i += GMAIL_IDS_PER_SEARCH) {
+          const part = ids.slice(i, i + GMAIL_IDS_PER_SEARCH);
+          const uids = await client.search(part.length === 1 ? { emailId: part[0] } : { or: part.map((emailId) => ({ emailId })) }, { uid: true });
+          if (!Array.isArray(uids) || uids.length === 0) continue;
+          for (const m of await client.fetchAll(uids, { uid: true, emailId: true }, { uid: true })) {
+            const messageId = m.emailId ? wanted.get(m.emailId) : undefined;
+            if (!messageId) continue;
+            const before = found.get(messageId);
+            if (!before || before.uid < m.uid) found.set(messageId, { path: box.path, mailboxId: box.id, role: box.role, uid: m.uid });
+          }
+        }
+      } finally {
+        lock.release();
+      }
+    }
+    return found;
+  }
+
   /** Which of these uids still exist in the mailbox. */
   async #existing(client: ImapFlow, path: string, uids: number[]): Promise<Set<number>> {
     if (uids.length === 0) return new Set();
@@ -1855,16 +1893,34 @@ export class AccountWorker {
       }
     }
     const out = new Map<string, ServerCopy[]>();
+    const lost: OutboxMessageChange[] = [];
     for (const change of changes) {
       const verified = (candidates.get(change.message.id) ?? []).filter((c) => present.get(c.path)?.has(c.uid));
       // One copy per folder.
       const perPath = new Map<string, ServerCopy>();
       for (const c of verified) if (!perPath.has(c.path) || perPath.get(c.path)!.uid < c.uid) perPath.set(c.path, c);
-      let copies = [...perPath.values()];
-      if (copies.length === 0) {
+      out.set(change.message.id, [...perPath.values()]);
+      if (perPath.size === 0) lost.push(change);
+    }
+    // Moved since we last knew (a step of a big change that went through before a failure):
+    // on Gmail, look them all up by id at once instead of one search per message.
+    let found: Map<string, ServerCopy> | null = null;
+    if (this.#gmail && lost.length > 0) {
+      try {
+        found = await this.#findManyOnGmail(client, lost.map((c) => c.message));
+      } catch (error) {
+        if (!client.usable || isNetworkError(error)) throw error;
+        this.#log.warn("looking messages up by id failed; looking one by one", { error: (error as Error).message });
+      }
+    }
+    for (const change of lost) {
+      let copies: ServerCopy[] = [];
+      const copy = found?.get(change.message.id);
+      if (copy) copies = [copy];
+      else if (!found || !isGmailId(change.message.remoteId)) {
         const where = this.#gmail ? undefined : [...new Set([...change.removeFrom.map((r) => pathOf(r.id, r.path)), ...locations.filter((l) => l.messageId === change.message.id).map((l) => l.path)])];
-        const found = await this.#findOnServer(client, change.message, where && where.length > 0 ? where : undefined);
-        if (found) copies = [found];
+        const one = await this.#findOnServer(client, change.message, where && where.length > 0 ? where : undefined);
+        if (one) copies = [one];
       }
       out.set(change.message.id, copies);
     }
