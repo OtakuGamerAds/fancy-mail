@@ -315,6 +315,16 @@ export const ThreadRow = memo(function ThreadRow({
         </span>
       ) : null}
       {thread.draftCount > 0 ? <span className="me-0.5 shrink-0 text-destructive-foreground text-xs font-medium">Draft</span> : null}
+      {thread.inTrash && thread.liveCount === 0 && !(dir.deletedLabelId && thread.labelIds.includes(dir.deletedLabelId)) ? (
+        // Not kept: all of it is in the server's own trash, which empties itself. (A conversation
+        // with one message deleted and the rest still here doesn't say it.)
+        <span
+          title="In the mail server's own trash, which empties itself (Gmail after 30 days). Restore it to keep it."
+          className="me-0.5 shrink-0 rounded bg-destructive/15 px-1.5 py-px font-medium text-[11px] text-destructive-foreground"
+        >
+          Server trash
+        </span>
+      ) : null}
       {shownLabels.map((label) => (
         <LabelChip key={label.id} label={label} className="max-w-28 shrink-0" />
       ))}

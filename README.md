@@ -36,6 +36,10 @@ only do what you allowed per account.
   **Reconnect** — it is never removed, and the mail already downloaded stays readable.
 - **Private by default.** Remote images in emails are blocked until you allow them, per
   message or per sender. Emails render in a sandbox, never with scripts.
+- **Deleted mail is kept.** Trash takes a conversation out of the inbox and labels it **Deleted**;
+  it never goes to Gmail's Bin, which empties itself after 30 days. In Fancy Mail it's the Trash,
+  and Restore brings it back any time. **Delete for good** (in the Trash, after a question) is the
+  only way into the server's own trash, and agents can't do it.
 - **Undo everything.** Archive, trash, labels, read state — by you or by an agent.
 - **Keyboard first.** `c` compose · `/` search · `j`/`k` move · `Ctrl Shift S` settle · `Ctrl Shift P` pin · `e` archive · `#` trash ·
   `s` star · `l` label · `r` reply · `z` undo · `?` all shortcuts.

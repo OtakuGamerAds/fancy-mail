@@ -53,6 +53,7 @@ export function toThreadSummary(row: ThreadRow, labelIds: string[]): ThreadSumma
     inSent: row.in_sent === 1,
     inTrash: row.in_trash === 1,
     inSpam: row.in_spam === 1,
+    liveCount: row.live_count,
     draftCount: row.draft_count,
     category: isCategory(row.category) ? row.category : null,
   };
@@ -121,6 +122,8 @@ function refreshSlice(db: Db, ids: string[]): void {
     if (!set) roles.set(row.message_id, (set = new Set()));
     set.add(row.role ?? "other");
   }
+  // The Deleted label (kept deleted mail), by name: Fancy Mail's own, like Gmail's Trash.
+  const deletedLabelId = db.value<string>("SELECT id FROM labels WHERE lower(trim(name)) = 'deleted' LIMIT 1") ?? null;
   const labelsByMessage = new Map<string, string[]>();
   for (const row of db.all<{ message_id: string; label_id: string }>(
     `SELECT ml.message_id AS message_id, ml.label_id AS label_id
@@ -160,7 +163,9 @@ function refreshSlice(db: Db, ids: string[]): void {
     }
 
     const rolesOf = (m: MsgRow) => roles.get(m.id) ?? new Set<MailboxRole | "other">();
-    const isDead = (m: MsgRow) => rolesOf(m).has("trash") || rolesOf(m).has("spam");
+    // Deleted (kept, with the Deleted label) counts as in the trash, as the server's trash does.
+    const isDeleted = (m: MsgRow) => deletedLabelId !== null && (labelsByMessage.get(m.id) ?? []).includes(deletedLabelId);
+    const isDead = (m: MsgRow) => rolesOf(m).has("trash") || rolesOf(m).has("spam") || isDeleted(m);
     const live = all.filter((m) => !isDead(m));
     const visible = live.length > 0 ? live : all;
     const real = visible.filter((m) => m.is_draft === 0);
@@ -187,7 +192,7 @@ function refreshSlice(db: Db, ids: string[]): void {
     const inInbox = anyRole(live, "inbox");
     const inSent = anyRole(live, "sent");
     const inDrafts = live.some((m) => m.is_draft === 1) || anyRole(live, "drafts");
-    const inTrash = anyRole(all, "trash");
+    const inTrash = anyRole(all, "trash") || all.some(isDeleted);
     const inSpam = anyRole(all, "spam");
     // Archived: out of the inbox, and something in it was received (not only sent mail or drafts).
     const inArchive =

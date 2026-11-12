@@ -97,12 +97,15 @@ describe("modify and undo", () => {
     expect(stack.store.threads.labelIds([a]).get(a)).toEqual([taxes]);
   });
 
-  it("trash and restore return messages where they were", () => {
+  it("trash keeps the mail (Deleted label, out of the inbox), and restore returns it where it was", () => {
     const a = thread();
     const m = addMessage(stack.store, imap, { threadId: a, in: ["inbox"] });
     stack.services.threads.modify([a], [{ type: "trash" }], user);
-    expect(roles(m)).toEqual(["trash"]);
+    expect(roles(m)).toEqual(["archive"]);
+    expect(stack.store.messages.labels([m]).map((l) => stack.store.labels.get(l.labelId)?.name)).toEqual(["Deleted"]);
     expect(row(a).in_trash).toBe(1);
+    expect(row(a).in_archive).toBe(0);
+    expect(stack.services.threads.search({ query: "in:trash" }, user).threads.map((t) => t.id)).toEqual([a]);
     expect(stack.services.threads.search({ query: "" }, user).threads).toHaveLength(0);
     // Restore days later, without the undo record: the message remembers where it was.
     const restored = stack.services.threads.modify([a], [{ type: "restore" }], user).activity!;
@@ -112,12 +115,56 @@ describe("modify and undo", () => {
     expect(row(a).in_inbox).toBe(1);
   });
 
-  it("trash on Gmail can be undone back into Inbox and All Mail", () => {
+  it("trash on Gmail stays in All Mail with the Deleted label, and can be undone", () => {
     const a = thread();
     const m = addMessage(stack.store, gmail, { threadId: a, in: ["inbox", "all"] });
     const trashed = stack.services.threads.modify([a], [{ type: "trash" }], user).activity!;
-    expect(roles(m)).toEqual(["trash"]);
+    expect(roles(m)).toEqual(["all"]);
+    expect(row(a).in_trash).toBe(1);
+    expect(row(a).live_count).toBe(0);
+    const op = stack.store.outbox.pending(gmail.accountId).at(-1)!;
+    const change = (op.payload as { changes: { addLabels: string[]; addTo: { role: string }[] }[] }).changes[0]!;
+    expect(change.addLabels).toEqual(["Deleted"]);
+    expect(change.addTo.map((t) => t.role)).not.toContain("trash");
     stack.services.activity.undo(trashed.id, user);
+    expect(roles(m)).toEqual(["all", "inbox"]);
+    expect(row(a).in_trash).toBe(0);
+  });
+
+  it("restore brings kept mail back days later; delete for good goes to the server's trash", () => {
+    const a = thread();
+    const m = addMessage(stack.store, gmail, { threadId: a, in: ["inbox", "all"] });
+    stack.services.threads.modify([a], [{ type: "trash" }], user);
+    stack.services.threads.modify([a], [{ type: "restore" }], user);
+    expect(roles(m)).toEqual(["all", "inbox"]);
+    expect(stack.store.messages.labels([m])).toEqual([]);
+    stack.services.threads.modify([a], [{ type: "trash" }], user);
+    stack.services.threads.modify([a], [{ type: "deleteForGood" }], user);
+    expect(roles(m)).toEqual(["trash"]);
+    expect(stack.store.messages.labels([m])).toEqual([]);
+    expect(row(a).in_trash).toBe(1);
+    // Still restorable from the server's trash, to where it was before it was deleted.
+    stack.services.threads.modify([a], [{ type: "restore" }], user);
+    expect(roles(m)).toEqual(["all", "inbox"]);
+  });
+
+  it("agents can't delete for good", () => {
+    const a = thread();
+    addMessage(stack.store, gmail, { threadId: a, in: ["inbox", "all"] });
+    expect(() => stack.services.threads.modify([a], [{ type: "deleteForGood" }], agent)).toThrow(/Only the user/);
+  });
+
+  it("keeps what is in Gmail's Bin once: out to All Mail with the Deleted label", () => {
+    const a = thread();
+    const m = addMessage(stack.store, gmail, { threadId: a, in: ["trash"] });
+    stack.store.messages.update(m, { restoreTo: [stack.store.mailboxes.byRole(gmail.accountId, "inbox")!.id] });
+    expect(stack.services.threads.keepServerTrash().size).toBe(0); // not synced yet
+    stack.store.accounts.setSyncState(gmail.accountId, { initialDone: true });
+    expect([...stack.services.threads.keepServerTrash().values()]).toEqual([1]);
+    expect(roles(m)).toEqual(["all"]);
+    expect(row(a).in_trash).toBe(1);
+    expect(stack.services.threads.keepServerTrash().size).toBe(0); // once
+    stack.services.threads.modify([a], [{ type: "restore" }], user);
     expect(roles(m)).toEqual(["all", "inbox"]);
   });
 

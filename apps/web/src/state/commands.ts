@@ -28,7 +28,8 @@ export type ThreadCommand =
   | "unwait"
   | "unsnooze"
   | "pin"
-  | "unpin";
+  | "unpin"
+  | "deleteForGood";
 
 const LEAVES_VIEW: Partial<Record<ThreadCommand, true>> = {
   archive: true,

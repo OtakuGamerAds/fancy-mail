@@ -15,6 +15,7 @@ import type { CallContext } from "./context.ts";
 import { invalidate, notifyOutbox, writeActivity } from "./env.ts";
 import type { ServiceEnv } from "./env.ts";
 import { applyDeltas, invertDelta, locationsOf, outboxOpsFor, planAction, summarize } from "./mutate.ts";
+import { ensureDeletedLabel, keepServerTrash } from "./keepTrash.ts";
 import { ACTION_STATE, ensureStateLabel, stateLabelIds } from "./settled.ts";
 import type { MessageDelta } from "./mutate.ts";
 
@@ -347,6 +348,10 @@ export function createThreadsService(env: ServiceEnv) {
         if (!accounts.has(row.account_id)) accounts.set(row.account_id, accountFor(row));
       }
       for (const account of accounts.values()) requireAccess(ctx, account, "organize", "changing conversations");
+      // Deleting for good is the person's own decision: agents only delete (kept, in Deleted).
+      if (isAgent(ctx) && actions.some((a) => a.type === "deleteForGood")) {
+        throw new AppError("forbidden", "Only the user can delete mail for good. Use trash: it keeps the mail in Deleted, where they can look at it.");
+      }
       for (const action of actions) {
         if (action.type === "addLabels" || action.type === "removeLabels") {
           for (const labelId of action.labelIds) {
@@ -367,7 +372,8 @@ export function createThreadsService(env: ServiceEnv) {
       const createdMailboxes: { accountId: string; mailbox: { id: string; path: string; role: string | null } }[] = [];
       let activity: Activity | null = null;
       const result = env.db.tx(() => {
-        // The state labels an action adds exist from its first use.
+        // The state labels an action adds exist from its first use (Deleted too).
+        if (actions.some((a) => a.type === "trash")) labelCreated = ensureDeletedLabel(store, env.now()).created || labelCreated;
         for (const action of actions) {
           const key = ACTION_STATE[action.type];
           if (key) labelCreated = ensureStateLabel(store, key, env.now()).created || labelCreated;
@@ -425,6 +431,11 @@ export function createThreadsService(env: ServiceEnv) {
     /** Sync engine: these got new mail, so they're active again (and say why). */
     reopen(threadIds: string[]): string[] {
       return reopenThreads(env, threadIds, { marks: true });
+    },
+
+    /** Once per account: what is in Gmail's Bin moves out to Deleted (kept). */
+    keepServerTrash(): Map<string, number> {
+      return keepServerTrash(env);
     },
 
     /** Waiting and snoozed conversations whose time is up come back (a timer calls this). */

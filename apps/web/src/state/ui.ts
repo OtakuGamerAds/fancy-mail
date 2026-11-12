@@ -38,6 +38,7 @@ export type DialogState =
   | { type: "remove-account"; accountId: string }
   | { type: "delete-group"; groupId: string }
   | { type: "delete-label"; labelId: string }
+  | { type: "delete-for-good"; threadIds: string[] }
   | { type: "reconnect"; accountId: string }
   | { type: "query-help" };
 

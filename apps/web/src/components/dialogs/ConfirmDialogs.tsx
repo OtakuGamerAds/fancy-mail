@@ -18,7 +18,7 @@ import { Label } from "~/components/ui/label";
 import { Spinner } from "~/components/ui/spinner";
 import { toast } from "~/components/ui/toast";
 import { errorMessage, rpc } from "~/rpc/client";
-import { attempt, refreshBootstrap } from "~/state/actions";
+import { attempt, modifyThreads, refreshBootstrap } from "~/state/actions";
 import { qk, queryClient, useDirectory } from "~/state/queries";
 import { currentRoute, navigate } from "~/state/router";
 import { useUi } from "~/state/ui";
@@ -33,6 +33,7 @@ export function ConfirmDialogs() {
   const removeAccount = dialog?.type === "remove-account" ? dir.accountById.get(dialog.accountId) : undefined;
   const deleteGroup = dialog?.type === "delete-group" ? dir.groupById.get(dialog.groupId) : undefined;
   const deleteLabel = dialog?.type === "delete-label" ? dir.labelById.get(dialog.labelId) : undefined;
+  const deleteForGood = dialog?.type === "delete-for-good" ? dialog.threadIds : null;
 
   const run = async (work: () => Promise<unknown>, failure: string, after?: () => void) => {
     setBusy(true);
@@ -113,6 +114,31 @@ export function ConfirmDialogs() {
               }
             >
               Delete group
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteForGood} onOpenChange={(open) => !open && !busy && close()}>
+        <AlertDialogPopup>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deleteForGood && deleteForGood.length > 1 ? plural(deleteForGood.length, "conversation") : "this conversation"} for good?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Fancy Mail's Trash keeps mail. This moves it to the mail server's own trash instead, which empties itself (Gmail after 30
+              days); after that it's gone. Until then, Restore still brings it back.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose render={<Button variant="ghost" disabled={busy} />}>Cancel</AlertDialogClose>
+            <Button
+              variant="destructive"
+              disabled={busy}
+              onClick={() =>
+                deleteForGood &&
+                void run(() => modifyThreads(deleteForGood, [{ type: "deleteForGood" }]), "Couldn't delete it", () => useUi.getState().clearSelection())
+              }
+            >
+              Delete for good
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>

@@ -2,7 +2,7 @@
  * The query cache is the client's copy of the server. Nothing goes stale by time: the server
  * says what changed (`invalidate` events) and after a reconnect everything is refetched.
  */
-import { findStateLabel, isReservedLabelName, type StateLabelKey, type ThreadMark, type ThreadTimer } from "@fancy-mail/contracts";
+import { findDeletedLabel, findStateLabel, isReservedLabelName, type StateLabelKey, type ThreadMark, type ThreadTimer } from "@fancy-mail/contracts";
 import type { Account, Bootstrap, Group, Label, ThreadDetail, ThreadSummary } from "@fancy-mail/contracts";
 import {
   keepPreviousData,
@@ -176,6 +176,8 @@ export interface Directory {
   ownAddresses: Set<string>;
   /** The Settled label (null until something is settled). */
   settledLabelId: string | null;
+  /** Deleted (kept) mail's label: the rest of the trash is in the server's own, which empties itself. */
+  deletedLabelId: string | null;
   /** Fancy Mail's own labels for where a conversation stands (missing until first used). */
   stateLabelIds: Partial<Record<StateLabelKey, string>>;
 }
@@ -197,6 +199,7 @@ export function directoryOf(bootstrap: Bootstrap | undefined): Directory {
     labelById: new Map(labels.map((l) => [l.id, l])),
     ownAddresses: new Set(accounts.map((a) => a.email.toLowerCase())),
     settledLabelId: findStateLabel(all, "settled")?.id ?? null,
+    deletedLabelId: findDeletedLabel(all)?.id ?? null,
     stateLabelIds: Object.fromEntries(
       (["settled", "waiting", "snoozed", "pinned"] as const).flatMap((key) => {
         const label = findStateLabel(all, key);

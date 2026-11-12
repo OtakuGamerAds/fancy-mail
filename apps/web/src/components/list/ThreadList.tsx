@@ -144,6 +144,7 @@ function draftRow(draft: Draft): ThreadSummary {
     inTrash: false,
     inSpam: false,
     draftCount: 1,
+    liveCount: 0,
     category: null,
   };
 }
@@ -908,7 +909,13 @@ function RowMenuItems({
           <Trash2Icon />
           {many ? `Trash ${targets.length}` : "Trash"}
         </MenuItem>
-      ) : null}
+      ) : (
+        // Trash keeps mail; this is the one way to really delete it (asks first).
+        <MenuItem variant="destructive" onClick={() => useUi.getState().openDialog({ type: "delete-for-good", threadIds: targets })}>
+          <Trash2Icon />
+          {many ? `Delete ${targets.length} for good…` : "Delete for good…"}
+        </MenuItem>
+      )}
     </>
   );
 }
@@ -933,6 +940,11 @@ function BulkBar({ view, selection }: { view: ViewRef; selection: string[] }) {
       <IconButton label={view.kind === "trash" ? "Restore" : "Trash"} shortcut="#" onClick={() => trashOrRestore(selection)}>
         {view.kind === "trash" ? <Undo2Icon /> : <Trash2Icon />}
       </IconButton>
+      {view.kind === "trash" ? (
+        <IconButton label="Delete for good…" onClick={() => useUi.getState().openDialog({ type: "delete-for-good", threadIds: selection })}>
+          <Trash2Icon />
+        </IconButton>
+      ) : null}
       <IconButton label="Mark read or unread" shortcut="Shift+I / Shift+U" onClick={() => toggleRead(selection)}>
         <MailOpenIcon />
       </IconButton>

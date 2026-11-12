@@ -123,8 +123,21 @@ export const PINNED_LABEL = "Pinned";
 export const STATE_LABELS = { settled: SETTLED_LABEL, waiting: WAITING_LABEL, snoozed: SNOOZED_LABEL, pinned: PINNED_LABEL } as const;
 export type StateLabelKey = keyof typeof STATE_LABELS;
 
+/**
+ * Where deleted mail is kept: Fancy Mail never puts mail in the server's own trash (Gmail
+ * empties its Bin after 30 days). Deleting takes a conversation out of the inbox and labels it
+ * Deleted; Fancy Mail shows those as its Trash. Moving it to the server's trash ("Delete for
+ * good") is a separate, deliberate step.
+ */
+export const DELETED_LABEL = "Deleted";
+
+export function findDeletedLabel<T extends { name: string }>(labels: readonly T[]): T | null {
+  const lower = DELETED_LABEL.toLocaleLowerCase();
+  return labels.find((l) => l.name.trim().toLocaleLowerCase() === lower) ?? null;
+}
+
 /** Label names kept for Fancy Mail's own use. */
-export const RESERVED_LABELS: readonly string[] = Object.values(STATE_LABELS);
+export const RESERVED_LABELS: readonly string[] = [...Object.values(STATE_LABELS), DELETED_LABEL];
 
 /** One of Fancy Mail's own labels among these, if it exists yet (made the first time it's used). */
 export function findStateLabel<T extends { name: string }>(labels: readonly T[], key: StateLabelKey): T | null {
@@ -224,6 +237,8 @@ export const ThreadSummary = z.object({
   inSent: z.boolean(),
   inTrash: z.boolean(),
   inSpam: z.boolean(),
+  /** Messages not in the trash or spam (0: all of it is deleted). */
+  liveCount: z.number().int(),
   draftCount: z.number().int(),
   /** Gmail's inbox category (Promotions, Social, …); null for other providers' mail. */
   category: z.enum(CATEGORY_VALUES).nullable(),

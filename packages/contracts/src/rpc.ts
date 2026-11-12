@@ -40,9 +40,12 @@ export const ModifyAction = z.discriminatedUnion("type", [
   z.object({ type: z.literal("archive") }),
   /** Back into the inbox (also undoes archive). */
   z.object({ type: z.literal("moveToInbox") }),
+  /** Deleted, but kept: out of the inbox, labelled Deleted (Fancy Mail's Trash). Never lost. */
   z.object({ type: z.literal("trash") }),
   /** Out of the trash, back where it was. */
   z.object({ type: z.literal("restore") }),
+  /** Delete for good: into the server's own trash (Gmail empties its Bin after 30 days). */
+  z.object({ type: z.literal("deleteForGood") }),
   z.object({ type: z.literal("markSpam") }),
   z.object({ type: z.literal("notSpam") }),
   /** Done with it: the Settled label on every message, and read. Stays where it is. */

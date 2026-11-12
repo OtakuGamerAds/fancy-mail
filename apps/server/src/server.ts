@@ -138,6 +138,18 @@ export async function createServer(config: ServerConfig, options: CreateServerOp
     };
     wake();
     const wakeTimer = setInterval(wake, 30_000);
+    // Deleted mail is kept: once per account, Gmail's Bin (which empties itself) moves to Deleted.
+    // Checked again a while after start, for accounts whose first sync finishes later.
+    const keepTrash = () => {
+      try {
+        for (const [email, count] of services.threads.keepServerTrash()) log.info("kept deleted mail out of the Bin", { account: email, conversations: count });
+      } catch (error) {
+        log.warn("could not keep the deleted mail", { error });
+      }
+    };
+    keepTrash();
+    const keepTrashTimer = setInterval(keepTrash, 10 * 60_000);
+    keepTrashTimer.unref?.();
     wakeTimer.unref?.();
 
     try {
@@ -168,6 +180,7 @@ export async function createServer(config: ServerConfig, options: CreateServerOp
         http.setMcpHandler(null);
         stopGuide();
         clearInterval(wakeTimer);
+        clearInterval(keepTrashTimer);
         try {
           await mcp?.close?.();
         } catch (error) {

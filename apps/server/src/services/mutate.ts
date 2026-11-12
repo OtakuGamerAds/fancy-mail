@@ -20,6 +20,7 @@ import type { MailboxRole, ModifyAction } from "@fancy-mail/contracts";
 import { newId } from "../db/ids.ts";
 import type { OutboxMessageChange, OutboxPayload } from "../store/activity.ts";
 import type { Store } from "../store/index.ts";
+import { findDeletedLabel } from "@fancy-mail/contracts";
 import { stateLabelIds } from "./settled.ts";
 import type { MailboxRecord, MessageLocation, MessageRecord } from "../store/types.ts";
 
@@ -165,7 +166,6 @@ function loadStates(store: Store, threadIds: string[]): Map<string, MessageState
 }
 
 const hasRole = (s: MessageState, role: MailboxRole) => s.locations.some((l) => l.role === role);
-const isDead = (s: MessageState) => hasRole(s, "trash") || hasRole(s, "spam");
 
 /**
  * Plans one action on some threads. May create local mailboxes (e.g. "Archive"); returns them
@@ -180,6 +180,9 @@ export function planAction(
   const boxes = mailboxResolver(env);
   const deltas: MessageDelta[] = [];
   const stateIds = stateLabelIds(env.store);
+  const deletedId = findDeletedLabel(env.store.labels.list())?.id ?? null;
+  const isDeleted = (s: MessageState) => deletedId !== null && s.labels.has(deletedId);
+  const isDead = (s: MessageState) => hasRole(s, "trash") || hasRole(s, "spam") || isDeleted(s);
   /**
    * A state change on every message: adds `add` (where missing), takes the other states off,
    * and reads it when asked. Settled, Waiting and Snoozed exclude each other and Pinned.
@@ -271,8 +274,28 @@ export function planAction(
         break;
       }
       case "trash":
+        // Kept: out of the inbox (as archive), labelled Deleted; it remembers the inbox for Restore.
+        if (!deletedId) break;
+        for (const s of thread) {
+          if (isDead(s)) continue;
+          const inbox = s.locations.filter((l) => l.role === "inbox");
+          const d = blank(s.message.id);
+          d.removeLocations = inbox.map((l) => l.mailboxId);
+          if (gmail) {
+            const all = boxes.byRole(accountId, "all");
+            if (all && !s.locations.some((l) => l.mailboxId === all.id)) d.addLocations.push(all.id);
+          } else if (inbox.length > 0) {
+            const archive = boxes.ensure(accountId, "archive");
+            if (!s.locations.some((l) => l.mailboxId === archive.id)) d.addLocations.push(archive.id);
+          }
+          d.addLabels = [deletedId];
+          d.restoreTo = inbox.map((l) => l.mailboxId);
+          deltas.push(d);
+        }
+        break;
+      case "deleteForGood":
       case "markSpam": {
-        const role: MailboxRole = action.type === "trash" ? "trash" : "spam";
+        const role: MailboxRole = action.type === "deleteForGood" ? "trash" : "spam";
         for (const s of thread) {
           if (hasRole(s, role)) continue;
           if (role === "spam" && s.message.isDraft) continue;
@@ -280,7 +303,9 @@ export function planAction(
           const d = blank(s.message.id);
           d.removeLocations = s.locations.map((l) => l.mailboxId);
           d.addLocations = [target.id];
-          d.restoreTo = s.locations.filter((l) => l.role !== "trash" && l.role !== "spam").map((l) => l.mailboxId);
+          // Deleted (kept) already remembers where it was.
+          d.restoreTo = isDeleted(s) ? (s.message.restoreTo ?? []) : s.locations.filter((l) => l.role !== "trash" && l.role !== "spam").map((l) => l.mailboxId);
+          if (isDeleted(s) && role === "trash") d.removeLabels = [deletedId!];
           deltas.push(d);
         }
         break;
@@ -289,6 +314,21 @@ export function planAction(
       case "notSpam": {
         const role: MailboxRole = action.type === "restore" ? "trash" : "spam";
         for (const s of thread) {
+          // Deleted (kept): the label comes off and it goes back where it was (the inbox, if it was in it).
+          if (action.type === "restore" && isDeleted(s) && !hasRole(s, "trash")) {
+            const d = blank(s.message.id);
+            d.removeLabels = [deletedId!];
+            const back = (s.message.restoreTo ?? []).filter((id) => {
+              const mb = env.store.mailboxes.get(id);
+              return mb !== null && mb.role !== "trash" && mb.role !== "spam" && !s.locations.some((l) => l.mailboxId === id);
+            });
+            d.addLocations = back;
+            // IMAP: one folder per message, so back in the inbox means out of the archive.
+            if (!gmail && back.length > 0) d.removeLocations = s.locations.filter((l) => l.role === "archive").map((l) => l.mailboxId);
+            d.restoreTo = null;
+            deltas.push(d);
+            continue;
+          }
           const from = s.locations.filter((l) => l.role === role);
           if (from.length === 0) continue;
           const d = blank(s.message.id);
@@ -533,6 +573,8 @@ export function summarize(actions: ModifyAction[], count: number, labelName: (id
         return `Moved ${n} to the inbox`;
       case "trash":
         return `Moved ${n} to the trash`;
+      case "deleteForGood":
+        return `Deleted ${n} for good (the server's trash)`;
       case "restore":
         return `Restored ${n} from the trash`;
       case "markSpam":

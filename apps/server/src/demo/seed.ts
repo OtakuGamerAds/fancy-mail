@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { COLOR_PALETTE, findStateLabel } from "@fancy-mail/contracts";
+import { COLOR_PALETTE, findDeletedLabel, findStateLabel } from "@fancy-mail/contracts";
 import type { Actor, Address, ModifyAction } from "@fancy-mail/contracts";
 
 import { idFromBytes } from "../db/ids.ts";
@@ -751,6 +751,8 @@ export function removeDemo(env: ServiceEnv): string[] {
       const label = findStateLabel(store.labels.list(), key);
       if (label) labels.push(label.id);
     }
+    const deleted = findDeletedLabel(store.labels.list());
+    if (deleted) labels.push(deleted.id);
     for (const labelId of labels) {
       if (store.labels.get(labelId) && store.labels.messagesWithLabel(labelId).length === 0) store.labels.delete(labelId);
     }

@@ -51,6 +51,12 @@
     {"name": "flow-10-reader-wait", "hash": "#/all/t/{agentDraftThread}", "click": ["button[aria-label='Wait for an answer']:not([data-thread-id] *)", "text:3 days"]},
     {"name": "flow-11-reply-send-wait-menu", "hash": "#/all/t/{thread:in:inbox -is:settled -is:waiting -is:snoozed}", "click": ["text:reply", "button[aria-label='Send and wait for an answer']"]},
     {"name": "flow-12-reply-send-wait", "hash": "#/all/t/{thread:in:inbox -is:settled -is:waiting -is:snoozed}", "click": ["text:reply", "button[aria-label='Send and wait for an answer']", "text:1 week"]},
-    {"name": "flow-13-after", "hash": "#/inbox?search=is%3Awaiting"}
+    {"name": "flow-13-after", "hash": "#/inbox?search=is%3Awaiting"},
+    {"name": "flow-14-trash", "hash": "#/inbox", "click": ["[data-actionable] button[aria-label='Trash (#)']"]},
+    {"name": "flow-15-trash-view", "hash": "#/trash"},
+    {"name": "flow-16-restore", "hash": "#/trash", "click": ["[data-thread-id] button[aria-label='Restore']"]},
+    {"name": "flow-17-delete-for-good-menu", "hash": "#/trash", "click": ["right:[data-thread-id]"]},
+    {"name": "flow-18-delete-for-good-dialog", "hash": "#/trash", "click": ["right:[data-thread-id]", "text:delete for good"]},
+    {"name": "flow-19-delete-for-good-done", "hash": "#/trash", "click": ["right:[data-thread-id]", "text:delete for good", "[role=alertdialog] button[data-variant=destructive], [role=alertdialog] button:last-child"]}
   ]
 }
