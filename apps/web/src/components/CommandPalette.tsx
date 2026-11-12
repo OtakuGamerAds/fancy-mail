@@ -144,7 +144,7 @@ function PaletteBody({ onClose }: { onClose(): void }) {
         title: VIEW_TITLES[kind],
         text: VIEW_TITLES[kind],
         icon: <Icon />,
-        run: () => go({ page: "mail", view: { kind, scope: { type: "all" } }, threadId: null }),
+        run: () => go({ page: "mail", view: { kind, scope: useUi.getState().scope }, threadId: null }),
       });
     }
     for (const group of dir.groups) {
@@ -177,7 +177,7 @@ function PaletteBody({ onClose }: { onClose(): void }) {
         detail: "Label",
         text: `${label.name} label`,
         icon: <ColorDot color={label.color} className="mx-1" />,
-        run: () => go({ page: "mail", view: { kind: "label", labelId: label.id, scope: { type: "all" } }, threadId: null }),
+        run: () => go({ page: "mail", view: { kind: "label", labelId: label.id, scope: useUi.getState().scope }, threadId: null }),
       });
     }
     const goShown = goItems.filter((i) => matches(i.text));

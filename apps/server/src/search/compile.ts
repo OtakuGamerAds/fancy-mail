@@ -91,11 +91,11 @@ export function compileQuery(parsed: ParsedQuery, lookups: CompileLookups, optio
   const texts = parsed.terms.filter((t): t is Extract<QueryTerm, { kind: "text" }> => t.kind === "text");
   const lastPositiveText = [...texts].reverse().find((t) => !t.negated);
 
-  // OR-groups: several positive thread:, account: or group: terms widen the search.
+  // OR-groups: several positive thread: terms widen the search, and so do account: and group:
+  // terms, together (group:Banking account:me@x.com is Banking's mail and that account's).
   const threadIds: string[] = [];
-  const accountSets: string[][] = [];
-  const groupClauses: string[] = [];
-  const groupParams: SqlValue[] = [];
+  const scopeIds: string[] = [];
+  let hasScope = false;
   let hasLocation = false;
 
   for (const term of parsed.terms) {
@@ -191,7 +191,10 @@ export function compileQuery(parsed: ParsedQuery, lookups: CompileLookups, optio
         }
         const ids = matches.map((a) => a.id);
         if (term.negated) addTerm(true, `t.account_id IN (${marks(ids.length)})`, ...ids);
-        else accountSets.push(ids);
+        else {
+          hasScope = true;
+          scopeIds.push(...ids);
+        }
         break;
       }
       case "group": {
@@ -213,11 +216,11 @@ export function compileQuery(parsed: ParsedQuery, lookups: CompileLookups, optio
           }
           ids = accounts.filter((a) => a.groupId === group.id).map((a) => a.id);
         }
-        const sql = ids.length > 0 ? `t.account_id IN (${marks(ids.length)})` : NOTHING;
-        if (term.negated) addTerm(true, sql, ...ids);
-        else {
-          groupClauses.push(sql);
-          groupParams.push(...ids);
+        if (term.negated) {
+          addTerm(true, ids.length > 0 ? `t.account_id IN (${marks(ids.length)})` : NOTHING, ...ids);
+        } else {
+          hasScope = true;
+          scopeIds.push(...ids);
         }
         break;
       }
@@ -250,11 +253,10 @@ export function compileQuery(parsed: ParsedQuery, lookups: CompileLookups, optio
   const match = positiveMatch.length > 0 ? positiveMatch.join(" AND ") : null;
   if (match) add(`${options.textScan ? "+t.id" : "t.id"} IN (${FTS_SUBQUERY})`, match);
   if (threadIds.length > 0) add(`t.id IN (${marks(threadIds.length)})`, ...threadIds);
-  if (accountSets.length > 0) {
-    const ids = [...new Set(accountSets.flat())];
-    add(`t.account_id IN (${marks(ids.length)})`, ...ids);
+  if (hasScope) {
+    const ids = [...new Set(scopeIds)];
+    add(ids.length > 0 ? `t.account_id IN (${marks(ids.length)})` : NOTHING, ...ids);
   }
-  if (groupClauses.length > 0) add(`(${groupClauses.join(" OR ")})`, ...groupParams);
   if (!hasLocation) add(LIVE);
   if (visible) {
     const ids = [...visible];

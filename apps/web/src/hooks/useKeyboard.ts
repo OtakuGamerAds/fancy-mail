@@ -126,7 +126,7 @@ export function useKeyboard() {
         const kind = GO_TO[key.toLowerCase()];
         if (kind) {
           event.preventDefault();
-          navigate({ page: "mail", view: { kind, scope: { type: "all" } }, threadId: null });
+          navigate({ page: "mail", view: { kind, scope: useUi.getState().scope }, threadId: null });
         }
         return;
       }
@@ -157,7 +157,7 @@ export function useKeyboard() {
           return;
         case "Escape":
           if (route.page === "settings" || route.page === "activity") {
-            navigate({ page: "mail", view: { kind: "inbox", scope: { type: "all" } }, threadId: null });
+            navigate({ page: "mail", view: { kind: "inbox", scope: useUi.getState().scope }, threadId: null });
             return;
           }
           if (ui.selection.length > 0) {

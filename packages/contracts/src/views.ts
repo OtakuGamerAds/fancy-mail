@@ -5,10 +5,50 @@
  */
 import { quoteQueryValue } from "./query.ts";
 
+/**
+ * Where a view looks: everything, one group, one account, or several groups and accounts
+ * together (`set`, always two or more: see normalizeScope).
+ */
 export type ViewScope =
   | { type: "all" }
   | { type: "group"; groupId: string }
-  | { type: "account"; accountId: string };
+  | { type: "account"; accountId: string }
+  | { type: "set"; groupIds: string[]; accountIds: string[] };
+
+export type ScopeItem = { type: "group"; id: string } | { type: "account"; id: string };
+
+export function scopeItems(scope: ViewScope): ScopeItem[] {
+  switch (scope.type) {
+    case "all":
+      return [];
+    case "group":
+      return [{ type: "group", id: scope.groupId }];
+    case "account":
+      return [{ type: "account", id: scope.accountId }];
+    case "set":
+      return [...scope.groupIds.map((id) => ({ type: "group" as const, id })), ...scope.accountIds.map((id) => ({ type: "account" as const, id }))];
+  }
+}
+
+/** The scope of these items: none is everything, one is that group or account. */
+export function scopeOf(items: ScopeItem[]): ViewScope {
+  const groupIds = [...new Set(items.filter((i) => i.type === "group").map((i) => i.id))];
+  const accountIds = [...new Set(items.filter((i) => i.type === "account").map((i) => i.id))];
+  if (groupIds.length + accountIds.length === 0) return { type: "all" };
+  if (groupIds.length === 1 && accountIds.length === 0) return { type: "group", groupId: groupIds[0]! };
+  if (accountIds.length === 1 && groupIds.length === 0) return { type: "account", accountId: accountIds[0]! };
+  return { type: "set", groupIds, accountIds };
+}
+
+export function scopeHas(scope: ViewScope, item: ScopeItem): boolean {
+  return scopeItems(scope).some((i) => i.type === item.type && i.id === item.id);
+}
+
+/** Adds the item to the scope, or takes it out (everything, when it was the last). */
+export function toggleScopeItem(scope: ViewScope, item: ScopeItem): ViewScope {
+  const items = scopeItems(scope);
+  return scopeHas(scope, item) ? scopeOf(items.filter((i) => !(i.type === item.type && i.id === item.id))) : scopeOf([...items, item]);
+}
 
 export const VIEW_KINDS = [
   "inbox",
@@ -64,6 +104,9 @@ export function scopeQuery(scope: ViewScope): string {
       return `group:${scope.groupId}`;
     case "account":
       return `account:${scope.accountId}`;
+    case "set":
+      // Several group: and account: terms widen each other (any of them).
+      return [...scope.groupIds.map((id) => `group:${id}`), ...scope.accountIds.map((id) => `account:${id}`)].join(" ");
   }
 }
 
@@ -82,10 +125,8 @@ export function viewQuery(view: MailView): string {
 }
 
 export function sameScope(a: ViewScope, b: ViewScope): boolean {
-  if (a.type !== b.type) return false;
-  if (a.type === "group" && b.type === "group") return a.groupId === b.groupId;
-  if (a.type === "account" && b.type === "account") return a.accountId === b.accountId;
-  return true;
+  const key = (s: ViewScope) => scopeItems(s).map((i) => `${i.type}:${i.id}`).sort().join(" ");
+  return a.type === b.type && key(a) === key(b);
 }
 
 export function sameView(a: MailView, b: MailView): boolean {

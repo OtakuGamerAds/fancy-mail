@@ -19,6 +19,7 @@ export type LabelPatch = Partial<Pick<LabelRecord, "name" | "color" | "sortOrder
 export interface LabelCounts {
   threads: number;
   unread: number;
+  byAccount: Record<string, { threads: number; unread: number }>;
 }
 
 export function createLabelsStore(db: Db) {
@@ -76,14 +77,23 @@ export function createLabelsStore(db: Db) {
     counts(accountIds: string[] | null = null): Map<string, LabelCounts> {
       const scope = accountIds ? `AND t.account_id IN (${placeholders(accountIds.length)})` : "";
       if (accountIds && accountIds.length === 0) return new Map();
-      const rows = db.all<{ label_id: string; n: number; unread: number }>(
-        `SELECT tl.label_id AS label_id, COUNT(*) AS n, SUM(t.unread_count > 0) AS unread
+      const rows = db.all<{ label_id: string; account_id: string; n: number; unread: number }>(
+        `SELECT tl.label_id AS label_id, t.account_id AS account_id, COUNT(*) AS n, SUM(t.unread_count > 0) AS unread
            FROM thread_labels tl JOIN threads t ON t.id = tl.thread_id
           WHERE (t.live_count > 0 OR t.draft_count > 0) ${scope}
-          GROUP BY tl.label_id`,
+          GROUP BY tl.label_id, t.account_id`,
         ...((accountIds ?? []) as SqlValue[]),
       );
-      return new Map(rows.map((r) => [r.label_id, { threads: r.n, unread: r.unread ?? 0 }]));
+      const out = new Map<string, LabelCounts>();
+      for (const r of rows) {
+        const c = out.get(r.label_id) ?? { threads: 0, unread: 0, byAccount: {} };
+        const unread = r.unread ?? 0;
+        c.threads += r.n;
+        c.unread += unread;
+        c.byAccount[r.account_id] = { threads: r.n, unread };
+        out.set(r.label_id, c);
+      }
+      return out;
     },
 
     /** The messages that carry a label (for undoing a delete), with their accounts. */

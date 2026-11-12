@@ -11,8 +11,9 @@ only do what you allowed per account.
 
 ## What it does
 
-- **Groups of accounts.** Drag accounts between groups; each group has an inbox, and each
-  account its own folders. "Inbox" at the top is everything at once.
+- **Groups of accounts.** Drag accounts between groups; each account has its own folders.
+  Pick a group or an account and the views and labels show only its mail (Starred in Banking,
+  Invoices in Business). Ctrl+click picks several together; All accounts is everything at once.
 - **One search language** everywhere — the search box, the sidebar views, the command palette
   (`Ctrl K`) and the agents all use it:
   `from:ads@ has:attachment after:2026-07-01 label:Invoices -label:Newsletters group:Banking`

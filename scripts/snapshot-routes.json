@@ -14,6 +14,8 @@
     { "name": "group-banking", "hash": "#/g/{group:Banking}/inbox" },
     { "name": "account-inbox", "hash": "#/a/{account:billing@brightwave.example}/inbox" },
     { "name": "label-invoices", "hash": "#/label/{label:Invoices}" },
+    { "name": "label-in-group", "hash": "#/g/{group:Business}/label/{label:Invoices}" },
+    { "name": "scope-several", "hash": "#/s/g.{group:Banking},a.{account:billing@brightwave.example}/inbox" },
     {
       "name": "thread-html",
       "hash": "#/label/{label:Newsletters}/t/{thread:label:Newsletters in:anywhere || newsletter in:anywhere}"

@@ -2,15 +2,15 @@
  * What the current view is called and which query it runs. A view is a query (contracts'
  * viewQuery); the sidebar's search and the filter chip are added to it.
  */
-import { VIEW_TITLES, scopeQuery, viewQuery, type Bootstrap, type InboxTab, type ViewScope } from "@fancy-mail/contracts";
+import { VIEW_TITLES, scopeItems, scopeQuery, viewQuery, type Account, type Bootstrap, type InboxTab, type ViewScope } from "@fancy-mail/contracts";
 
-import { directoryOf } from "./queries";
+import { directoryOf, type Directory } from "./queries";
 import { toMailView, viewScope, type ViewRef } from "./router";
 import type { InboxTabId, ListFilter } from "./ui";
 
 export interface ViewInfo {
   title: string;
-  /** "Banking" or "Billing" next to the title for a scoped view. */
+  /** "Banking", "Billing" or "Banking + Studio" next to the title for a scoped view. */
   scopeLabel: string | null;
   /** The view's own query, or null while its folder is unknown. */
   query: string | null;
@@ -28,14 +28,29 @@ export const FILTER_QUERY: Record<ListFilter, string> = {
   attachments: "has:attachment",
 };
 
+/** The accounts a scope covers (a group's, an account, several together, or all). */
+export function scopeAccounts(scope: ViewScope, dir: Directory): Account[] {
+  if (scope.type === "all") return dir.accounts;
+  const groups = new Set<string>();
+  const accounts = new Set<string>();
+  for (const item of scopeItems(scope)) (item.type === "group" ? groups : accounts).add(item.id);
+  return dir.accounts.filter((a) => accounts.has(a.id) || (a.groupId !== null && groups.has(a.groupId)));
+}
+
+export function inScope(accountId: string, scope: ViewScope, dir: Directory): boolean {
+  return scopeAccounts(scope, dir).some((a) => a.id === accountId);
+}
+
 export function scopeLabel(scope: ViewScope, bootstrap: Bootstrap | undefined): string | null {
   const dir = directoryOf(bootstrap);
-  if (scope.type === "group") return dir.groupById.get(scope.groupId)?.name ?? "Group";
-  if (scope.type === "account") {
-    const account = dir.accountById.get(scope.accountId);
+  const names = scopeItems(scope).map((item) => {
+    if (item.type === "group") return dir.groupById.get(item.id)?.name ?? "Group";
+    const account = dir.accountById.get(item.id);
     return account ? account.displayName || account.email : "Account";
-  }
-  return null;
+  });
+  if (names.length === 0) return null;
+  if (names.length <= 2) return names.join(" + ");
+  return `${names[0]} + ${names.length - 1} more`;
 }
 
 export function describeView(view: ViewRef, bootstrap: Bootstrap | undefined): ViewInfo {
@@ -57,18 +72,14 @@ export function describeView(view: ViewRef, bootstrap: Bootstrap | undefined): V
       title = "Search";
       break;
     default:
-      if (view.kind === "inbox" && scope.type !== "all") {
-        // "Banking", "billing@brightwave.example": the scope is the title of its inbox.
-        title = chip ?? "Inbox";
-        chip = null;
-      } else {
-        title = VIEW_TITLES[view.kind];
-      }
+      // "Inbox" and the scope beside it, as with every other view: the scope is where you
+      // look, the view is what.
+      title = VIEW_TITLES[view.kind];
   }
+  // A folder belongs to its account; the account is in its name already.
+  if (view.kind === "mailbox") chip = null;
 
-  let accountsInScope = dir.accounts;
-  if (scope.type === "group") accountsInScope = dir.accounts.filter((a) => a.groupId === scope.groupId);
-  if (scope.type === "account") accountsInScope = dir.accounts.filter((a) => a.id === scope.accountId);
+  const accountsInScope = scopeAccounts(scope, dir);
 
   let defaultAccountId: string | null = null;
   if (scope.type === "account") defaultAccountId = scope.accountId;
@@ -79,7 +90,7 @@ export function describeView(view: ViewRef, bootstrap: Bootstrap | undefined): V
     scopeLabel: chip,
     query,
     scope,
-    spansAccounts: scope.type !== "account" && dir.accounts.length > 1,
+    spansAccounts: accountsInScope.length > 1,
     defaultAccountId,
   };
 }

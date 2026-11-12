@@ -101,6 +101,9 @@ describe("compileQuery", () => {
     expect(found("group:business")).toHaveLength(2);
     expect(found("group:grp_work")).toHaveLength(2);
     expect(found("group:none")).toEqual([ids.sent]);
+    // Several scopes widen each other: a group's mail and another account's, as the sidebar asks.
+    expect(found(`group:business account:${home.accountId}`)).toHaveLength(3);
+    expect(found(`group:business -account:${work.accountId}`)).toHaveLength(0);
     const r = search("account:nobody@x.test");
     expect(r.threads).toHaveLength(0);
     expect(r.queryErrors[0]).toBe('No account "nobody@x.test". Accounts: studio@work.test, me@home.test.');

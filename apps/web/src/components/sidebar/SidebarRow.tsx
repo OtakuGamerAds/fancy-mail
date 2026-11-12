@@ -12,6 +12,8 @@ export const sidebarRowClass =
 
 export interface SidebarRowProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "children"> {
   active?: boolean;
+  /** A group or account the mail views look at (tinted, unlike the open view's gray). */
+  scoped?: boolean;
   dropTarget?: boolean;
   leading?: ReactNode;
   label: ReactNode;
@@ -27,7 +29,7 @@ export interface SidebarRowProps extends Omit<React.HTMLAttributes<HTMLDivElemen
 }
 
 export const SidebarRow = forwardRef<HTMLDivElement, SidebarRowProps>(function SidebarRow(
-  { active, dropTarget, leading, label, trailing, actions, actionsOpen, emphasized, onActivate, className, onClick, onKeyDown, ...props },
+  { active, scoped, dropTarget, leading, label, trailing, actions, actionsOpen, emphasized, onActivate, className, onClick, onKeyDown, ...props },
   ref,
 ) {
   // A wrapper's handlers (a tooltip trigger, a drag handle) run first, then the row's own:
@@ -38,9 +40,14 @@ export const SidebarRow = forwardRef<HTMLDivElement, SidebarRowProps>(function S
       role="link"
       tabIndex={0}
       data-active={active ? "true" : undefined}
+      data-scoped={scoped ? "true" : undefined}
       data-drop-target={dropTarget ? "true" : undefined}
       aria-current={active ? "page" : undefined}
-      className={cn(sidebarRowClass, className)}
+      className={cn(
+        sidebarRowClass,
+        "data-[scoped=true]:bg-primary/14 data-[scoped=true]:text-sidebar-foreground data-[scoped=true]:hover:bg-primary/18 data-[scoped=true]:[&>svg:not([class*='text-'])]:text-sidebar-foreground",
+        className,
+      )}
       onClick={(event) => {
         onClick?.(event);
         if (event.defaultPrevented) return;

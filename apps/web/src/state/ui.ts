@@ -2,11 +2,11 @@
  * What the client keeps of its own: where the person is, what is selected, panel sizes and
  * which overlay is open. Mail itself lives in the query cache.
  */
-import type { DraftMode, InboxTab } from "@fancy-mail/contracts";
+import type { DraftMode, InboxTab, ViewScope } from "@fancy-mail/contracts";
 import { create } from "zustand";
 
 import { clamp, safeStorage } from "~/lib/utils";
-import { INBOX_ROUTE, navigate, type Route } from "./router";
+import { INBOX_ROUTE, navigate, viewScope, type Route } from "./router";
 
 export const SIDEBAR_MIN = 220;
 export const SIDEBAR_MAX = 380;
@@ -50,6 +50,8 @@ export interface ReplyRequest {
 
 interface UiState {
   route: Route;
+  /** Where the mail views look: the last mail route's scope (kept while in Settings). */
+  scope: ViewScope;
   sidebarCollapsed: boolean;
   sidebarWidth: number;
   listWidth: number;
@@ -137,6 +139,7 @@ let nonce = 0;
 
 export const useUi = create<UiState>()((set, get) => ({
   route: INBOX_ROUTE,
+  scope: { type: "all" },
   sidebarCollapsed: stored.sidebarCollapsed,
   sidebarWidth: stored.sidebarWidth,
   listWidth: stored.listWidth,
@@ -171,6 +174,9 @@ export const useUi = create<UiState>()((set, get) => ({
     } else {
       set({ route });
     }
+    // A conversation opened from a notification or a link looks everywhere: that doesn't
+    // change where the views look.
+    if (route.page === "mail" && route.view.kind !== "search") set({ scope: viewScope(route.view) });
     // Opening a conversation takes the composer's place (it saved what was written).
     if (route.page === "mail" && route.threadId) set({ focusedThreadId: route.threadId, compose: null });
   },

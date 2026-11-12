@@ -4,6 +4,7 @@
  *
  *   #/inbox  #/unread … #/trash               a view across every account
  *   #/g/<groupId>/<kind>  #/a/<accountId>/<kind>
+ *   #/s/g.<groupId>,a.<accountId>,…/<kind>     several groups and accounts together
  *   #/a/<accountId>/folder/<mailboxId>
  *   #/label/<labelId>  (+ a scope prefix)      #/search?q=…  (+ a scope prefix)
  *   any of these + /t/<threadId>               an open conversation
@@ -13,6 +14,8 @@
  */
 import {
   VIEW_KINDS,
+  scopeOf,
+  type ScopeItem,
   type Bootstrap,
   type MailView,
   type ViewKind,
@@ -89,6 +92,16 @@ export function parseHash(hash: string): { route: Route; overlays: Overlays; val
   if ((segments[0] === "g" || segments[0] === "a") && segments[1]) {
     scope = segments[0] === "g" ? { type: "group", groupId: segments[1] } : { type: "account", accountId: segments[1] };
     rest = segments.slice(2);
+  } else if (segments[0] === "s" && segments[1]) {
+    const items = segments[1].split(",").flatMap((part): ScopeItem[] => {
+      const id = part.slice(2);
+      if (!id) return [];
+      if (part.startsWith("g.")) return [{ type: "group", id }];
+      if (part.startsWith("a.")) return [{ type: "account", id }];
+      return [];
+    });
+    scope = scopeOf(items);
+    rest = segments.slice(2);
   }
 
   let view: ViewRef | null = null;
@@ -122,6 +135,7 @@ export function parseHash(hash: string): { route: Route; overlays: Overlays; val
 function scopePrefix(scope: ViewScope): string {
   if (scope.type === "group") return `/g/${enc(scope.groupId)}`;
   if (scope.type === "account") return `/a/${enc(scope.accountId)}`;
+  if (scope.type === "set") return `/s/${[...scope.groupIds.map((id) => `g.${enc(id)}`), ...scope.accountIds.map((id) => `a.${enc(id)}`)].join(",")}`;
   return "";
 }
 

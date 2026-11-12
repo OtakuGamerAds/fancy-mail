@@ -185,7 +185,7 @@ export function ActivityPage() {
       >
         <ShowSidebarButton />
         <h1 className="flex-1 font-semibold text-[15px] tracking-tight">Activity</h1>
-        <IconButton label="Close" shortcut="Esc" onClick={() => navigate({ page: "mail", view: { kind: "inbox", scope: { type: "all" } }, threadId: null })}>
+        <IconButton label="Close" shortcut="Esc" onClick={() => navigate({ page: "mail", view: { kind: "inbox", scope: useUi.getState().scope }, threadId: null })}>
           <XIcon />
         </IconButton>
       </div>

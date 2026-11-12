@@ -3,9 +3,11 @@
  * right click (anchored at the pointer) or by the row's "…" button (anchored to it), so there
  * is never a second menu beside the first.
  */
-import type { Account, Group, Label } from "@fancy-mail/contracts";
+import { scopeHas, scopeItems, type Account, type Group, type Label, type ScopeItem } from "@fancy-mail/contracts";
 import {
   CogIcon,
+  MinusIcon,
+  PlusIcon,
   FolderInputIcon,
   FolderPlusIcon,
   KeyRoundIcon,
@@ -32,6 +34,7 @@ import {
 } from "~/components/ui/menu";
 import { syncNow, updateAccount, updateGroup, updateLabel } from "~/state/actions";
 import { useDirectory } from "~/state/queries";
+import { MULTI_CLICK, toggleInScope, useScope } from "~/state/scope";
 import { useUi } from "~/state/ui";
 import { startReconnect } from "~/components/dialogs/reconnect";
 import { openAccountSettings } from "~/components/settings/AccountsSettings";
@@ -68,10 +71,33 @@ function RowMenuShell({ menu, children, width = "w-56" }: { menu: RowMenuState; 
   );
 }
 
+/**
+ * "Add to view" / "Remove from view": the menu's way to what Ctrl+click does. Not shown while
+ * the views look at everything or at just this one (a plain click does that).
+ */
+function ScopeMenuItem({ item }: { item: ScopeItem }) {
+  const scope = useScope();
+  const onMail = useUi((s) => s.route.page === "mail");
+  const items = scopeItems(scope);
+  const has = scopeHas(scope, item);
+  if (!onMail || items.length === 0 || (has && items.length === 1)) return null;
+  return (
+    <>
+      <MenuItem onClick={() => toggleInScope(item)}>
+        {has ? <MinusIcon /> : <PlusIcon />}
+        <span className="flex-1">{has ? "Remove from view" : "Add to view"}</span>
+        <span className="text-muted-foreground text-xs">{MULTI_CLICK}</span>
+      </MenuItem>
+      <MenuSeparator />
+    </>
+  );
+}
+
 export function GroupMenu({ group, menu }: { group: Group; menu: RowMenuState }) {
   const ui = useUi.getState();
   return (
     <RowMenuShell menu={menu}>
+      <ScopeMenuItem item={{ type: "group", id: group.id }} />
       <MenuItem onClick={() => ui.setRenaming({ kind: "group", id: group.id })}>
         <PencilIcon />
         Rename
@@ -97,6 +123,7 @@ export function AccountMenu({ account, menu }: { account: Account; menu: RowMenu
   const isDemo = account.provider === "demo";
   return (
     <RowMenuShell menu={menu}>
+      <ScopeMenuItem item={{ type: "account", id: account.id }} />
       <MenuItem onClick={() => ui.setRenaming({ kind: "account", id: account.id })}>
         <PencilIcon />
         <span className="flex-1">Rename</span>

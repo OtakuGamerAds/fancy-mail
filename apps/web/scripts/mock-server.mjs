@@ -253,6 +253,12 @@ function bootstrap() {
       ...l,
       threadCount: threads.filter((t) => t.labelIds.includes(l.id)).length,
       unreadThreadCount: threads.filter((t) => t.labelIds.includes(l.id) && t.unreadCount > 0 && !t.inTrash).length,
+      byAccount: Object.fromEntries(
+        accs.map((a) => {
+          const mine = threads.filter((t) => t.accountId === a.id && t.labelIds.includes(l.id));
+          return [a.id, { threads: mine.length, unread: mine.filter((t) => t.unreadCount > 0 && !t.inTrash).length }];
+        }),
+      ),
     })),
     mailboxes,
     settings,
@@ -424,13 +430,13 @@ const handlers = {
     const l = { id: id("l"), name, color: color ?? null, sortOrder: labels.length };
     labels.push(l);
     broadcast({ type: "invalidate", topics: ["labels"] });
-    return { ...l, threadCount: 0, unreadThreadCount: 0 };
+    return { ...l, threadCount: 0, unreadThreadCount: 0, byAccount: {} };
   },
   "labels.update": ({ labelId, ...patch }) => {
     const l = labels.find((x) => x.id === labelId);
     Object.assign(l, patch);
     broadcast({ type: "invalidate", topics: ["labels"] });
-    return { ...l, threadCount: 0, unreadThreadCount: 0 };
+    return { ...l, threadCount: 0, unreadThreadCount: 0, byAccount: {} };
   },
   "labels.delete": ({ labelId }) => {
     labels.splice(labels.findIndex((l) => l.id === labelId), 1);

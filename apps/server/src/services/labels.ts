@@ -2,6 +2,7 @@ import type { Label } from "@fancy-mail/contracts";
 
 import { newId } from "../db/ids.ts";
 import { AppError } from "../errors.ts";
+import type { LabelCounts } from "../store/labels.ts";
 import type { LabelRecord } from "../store/types.ts";
 import { requireAnyAccess, visibleAccountIds } from "./context.ts";
 import type { CallContext } from "./context.ts";
@@ -35,7 +36,7 @@ export function createLabelsService(env: ServiceEnv) {
     return clean;
   }
 
-  function toLabel(record: LabelRecord, counts: Map<string, { threads: number; unread: number }>): Label {
+  function toLabel(record: LabelRecord, counts: Map<string, LabelCounts>): Label {
     const c = counts.get(record.id);
     return {
       id: record.id,
@@ -44,6 +45,7 @@ export function createLabelsService(env: ServiceEnv) {
       sortOrder: record.sortOrder,
       threadCount: c?.threads ?? 0,
       unreadThreadCount: c?.unread ?? 0,
+      byAccount: c?.byAccount ?? {},
     };
   }
 

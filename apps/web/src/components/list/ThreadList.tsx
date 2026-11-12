@@ -4,7 +4,7 @@
  * sidebar), and the virtualized rows. New messages still being written sit at the top of
  * their inbox. When the view or the search changes, the new rows slide in.
  */
-import type { Draft, InboxTab, ThreadSummary, ViewScope } from "@fancy-mail/contracts";
+import type { Draft, InboxTab, ThreadSummary } from "@fancy-mail/contracts";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArchiveIcon,
@@ -46,10 +46,11 @@ import { errorMessage } from "~/rpc/client";
 import { archiveOrInbox, runThreadCommand, spamOrNot, toggleRead, toggleStar, trashOrRestore } from "~/state/commands";
 import { listNav } from "~/state/listNav";
 import { openConversation } from "~/state/openConversation";
-import { useBootstrap, useDirectory, useDrafts, useSearchFacets, useThreads, type Directory } from "~/state/queries";
+import { useBootstrap, useDirectory, useDrafts, useSearchFacets, useThreads } from "~/state/queries";
 import { currentRoute, navigateBackTo, viewKey, type ViewRef } from "~/state/router";
 import { useUi, type InboxTabId, type ListFilter } from "~/state/ui";
-import { describeView, inboxTabQuery, listQuery, searchWidens } from "~/state/view";
+import { goScope } from "~/state/scope";
+import { describeView, inboxTabQuery, inScope, listQuery, searchWidens } from "~/state/view";
 
 const FILTERS: { id: ListFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -70,12 +71,6 @@ const EXAMPLES = ["from:anna has:attachment", "is:unread newer_than:7d"];
 
 /** How long rows that arrive after a change keep their entrance (rows scrolled into view later don't). */
 const ENTER_WINDOW_MS = 450;
-
-function inScope(accountId: string, scope: ViewScope, dir: Directory): boolean {
-  if (scope.type === "account") return accountId === scope.accountId;
-  if (scope.type === "group") return dir.accountById.get(accountId)?.groupId === scope.groupId;
-  return dir.accountById.has(accountId);
-}
 
 /** An unsent new message, as a row (it has no conversation of its own yet). */
 function draftRow(draft: Draft): ThreadSummary {
@@ -303,8 +298,19 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
                 {info.title}
               </h1>
               {info.scopeLabel ? (
-                <span className="max-w-40 shrink truncate rounded-md bg-white/[0.06] px-1.5 py-0.5 text-muted-foreground text-xs">
-                  {info.scopeLabel}
+                <span className="app-no-drag inline-flex min-w-0 max-w-56 shrink items-center self-center rounded-md bg-primary/10 ps-1.5 text-foreground/80 text-xs">
+                  <span className="truncate py-0.5" title={info.scopeLabel}>
+                    {info.scopeLabel}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Show all accounts"
+                    title="Show all accounts"
+                    className="ms-0.5 grid size-5 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground outline-none hover:bg-white/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => goScope({ type: "all" })}
+                  >
+                    <XIcon className="size-3" />
+                  </button>
                 </span>
               ) : null}
               {firstPage && !threadsQuery.isPlaceholderData ? (

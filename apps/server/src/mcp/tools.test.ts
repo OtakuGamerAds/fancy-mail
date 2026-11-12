@@ -129,7 +129,7 @@ function fakeApi(levels: { business: AgentAccess; bank: AgentAccess }) {
       return { activity: entry };
     },
     createLabel: ({ name, color }) => {
-      const label = { id: `lbl_${labels.length + 1}`, name, color, sortOrder: labels.length, threadCount: 0, unreadThreadCount: 0 };
+      const label = { id: `lbl_${labels.length + 1}`, name, color, sortOrder: labels.length, threadCount: 0, unreadThreadCount: 0, byAccount: {} };
       labels.push(label);
       return label;
     },

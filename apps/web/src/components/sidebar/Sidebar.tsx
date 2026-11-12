@@ -4,9 +4,10 @@
  * Labels sections that collapse; a pinned footer with Activity, the agent line and Settings.
  * While a search is on, groups, accounts and labels count their matches (the rest fade).
  */
-import type { Account, Group, Label, ViewKind } from "@fancy-mail/contracts";
+import { scopeHas, type Account, type Group, type Label, type ScopeItem, type ViewKind } from "@fancy-mail/contracts";
 import {
   ArchiveIcon,
+  LayersIcon,
   ChevronRightIcon,
   FileTextIcon,
   InboxIcon,
@@ -36,6 +37,8 @@ import { cn } from "~/lib/utils";
 import { createGroup, createLabel, updateAccount, updateGroup, updateLabel } from "~/state/actions";
 import { useBootstrap, useDirectory, useDrafts } from "~/state/queries";
 import { navigate, viewKey, type ViewRef } from "~/state/router";
+import { goScope, MULTI_CLICK, pickScope, useScope } from "~/state/scope";
+import { scopeAccounts, scopeLabel } from "~/state/view";
 import { openAccountSettings } from "~/components/settings/AccountsSettings";
 import { SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN, useUi } from "~/state/ui";
 import { useColumnResize } from "~/hooks/useColumnResize";
@@ -137,7 +140,7 @@ function Section({
   children,
 }: {
   id: string;
-  title: string;
+  title: ReactNode;
   onAdd?: () => void;
   addLabel?: string;
   children: ReactNode;
@@ -179,22 +182,29 @@ function MailSection() {
   const active = useActiveKey();
   const matches = useSearchMatches();
   const dir = useDirectory();
+  const { data: bootstrap } = useBootstrap();
   const drafts = useDrafts();
+  const scope = useScope();
   const moreCollapsed = useUi((s) => !!s.collapsedSections.more);
   const toggle = useUi((s) => s.toggleSection);
 
-  const inboxUnread = dir.accounts.reduce((sum, a) => sum + a.unreadInboxCount, 0);
-  const draftCount = (drafts.data ?? []).filter((d) => d.sendState === "draft" || d.sendState === "failed").length;
+  // The views look where the groups section points; their counts are that place's.
+  const accounts = scopeAccounts(scope, dir);
+  const ids = new Set(accounts.map((a) => a.id));
+  const inboxUnread = accounts.reduce((sum, a) => sum + a.unreadInboxCount, 0);
+  const draftCount = (drafts.data ?? []).filter((d) => (d.sendState === "draft" || d.sendState === "failed") && ids.has(d.accountId)).length;
   const counts: Partial<Record<ViewKind, number>> = { inbox: inboxUnread, unread: inboxUnread, drafts: draftCount };
-  const moreActive = MORE_VIEWS.some((v) => active === viewKey({ kind: v.kind, scope: { type: "all" } }));
+  const moreActive = MORE_VIEWS.some((v) => active === viewKey({ kind: v.kind, scope }));
+  const where = scopeLabel(scope, bootstrap);
+  const inboxMatches = scope.type === "all" ? matches.total : matches.accounts(accounts);
 
   const row = (v: { kind: ViewKind; label: string; icon: LucideIcon }) => {
-    const view: ViewRef = { kind: v.kind, scope: { type: "all" } };
+    const view: ViewRef = { kind: v.kind, scope };
     const Icon = v.icon;
     const count = counts[v.kind] ?? 0;
-    // Searching from Inbox looks through all mail, so Inbox counts every match.
+    // Searching from Inbox looks through all the mail it looks at, so Inbox counts those matches.
     const trailing = matches.active ? (
-      v.kind === "inbox" ? <MatchCount value={matches.total} /> : null
+      v.kind === "inbox" ? <MatchCount value={inboxMatches} /> : null
     ) : (
       <Count value={count} strong={v.kind === "inbox"} />
     );
@@ -204,7 +214,7 @@ function MailSection() {
         active={active === viewKey(view)}
         leading={<Icon />}
         label={v.label}
-        emphasized={matches.active ? v.kind === "inbox" && matches.total > 0 : v.kind === "inbox" && count > 0}
+        emphasized={matches.active ? v.kind === "inbox" && inboxMatches > 0 : v.kind === "inbox" && count > 0}
         trailing={trailing}
         onActivate={() => go(view)}
       />
@@ -212,7 +222,20 @@ function MailSection() {
   };
 
   return (
-    <Section id="mail" title="Mail">
+    <Section
+      id="mail"
+      title={
+        where ? (
+          <span className="flex min-w-0 items-center gap-1" title={`Mail in ${where}`}>
+            Mail
+            <span aria-hidden>·</span>
+            <span className="max-w-36 truncate text-sidebar-foreground/80">{where}</span>
+          </span>
+        ) : (
+          "Mail"
+        )
+      }
+    >
       {MAIL_VIEWS.map(row)}
       <button
         type="button"
@@ -252,6 +275,7 @@ function GroupsSection() {
 
   return (
     <Section id="groups" title="Groups" addLabel="New group" onAdd={() => setRenaming({ kind: "group", id: "new" })}>
+      {dir.accounts.length > 1 ? <AllAccountsRow /> : null}
       <GroupsDnd
         groups={dir.groups}
         accountsByGroup={byGroup}
@@ -290,6 +314,37 @@ function GroupsSection() {
   );
 }
 
+/** Everything at once: the views look at every account. */
+function AllAccountsRow() {
+  const dir = useDirectory();
+  const scope = useScope();
+  const onMail = useUi((s) => s.route.page === "mail");
+  const unread = dir.accounts.reduce((sum, a) => sum + a.unreadInboxCount, 0);
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        delay={600}
+        render={
+          <SidebarRow
+            scoped={onMail && scope.type === "all"}
+            className="ps-1"
+            leading={
+              <span className="grid size-5 place-items-center">
+                <LayersIcon className="size-3.5" />
+              </span>
+            }
+            label="All accounts"
+            emphasized={unread > 0}
+            trailing={<Count value={unread} />}
+            onActivate={() => goScope({ type: "all" })}
+          />
+        }
+      />
+      <TooltipPopup side="right">{`${MULTI_CLICK} groups or accounts to see several together`}</TooltipPopup>
+    </Tooltip>
+  );
+}
+
 function GroupBlock({
   group,
   accounts,
@@ -303,11 +358,12 @@ function GroupBlock({
   dropTarget: boolean;
   matches: SearchMatches;
 }) {
-  const active = useActiveKey();
+  const scope = useScope();
+  const onMail = useUi((s) => s.route.page === "mail");
   const renaming = useUi((s) => s.renaming);
   const setRenaming = useUi((s) => s.setRenaming);
   const menu = useRowMenu();
-  const view: ViewRef = { kind: "inbox", scope: { type: "group", groupId: group.id } };
+  const item: ScopeItem = { type: "group", id: group.id };
   const isRenaming = renaming?.kind === "group" && renaming.id === group.id;
   const collapsed = group.collapsed;
   const found = matches.accounts(accounts);
@@ -331,7 +387,7 @@ function GroupBlock({
           {...handle.attributes}
           {...handle.listeners}
           style={handle.style}
-          active={active === viewKey(view)}
+          scoped={onMail && scopeHas(scope, item)}
           dropTarget={dropTarget}
           className={cn("ps-1", matches.active && found === 0 && NO_MATCHES)}
           leading={
@@ -369,7 +425,11 @@ function GroupBlock({
           }
           onContextMenu={menu.openAtPointer}
           onDoubleClick={() => setRenaming({ kind: "group", id: group.id })}
-          onActivate={() => go(view)}
+          onClick={(event) => {
+            event.preventDefault();
+            pickScope(item, event);
+          }}
+          onActivate={() => pickScope(item, { ctrlKey: false, metaKey: false })}
         />
       )}
       <GroupMenu group={group} menu={menu} />
@@ -437,7 +497,9 @@ function AccountBlock({ account, handle, matches }: { account: Account; handle: 
   const renaming = useUi((s) => s.renaming);
   const setRenaming = useUi((s) => s.setRenaming);
   const menu = useRowMenu();
-  const view: ViewRef = { kind: "inbox", scope: { type: "account", accountId: account.id } };
+  const scope = useScope();
+  const onMail = useUi((s) => s.route.page === "mail");
+  const item: ScopeItem = { type: "account", id: account.id };
   const isRenaming = renaming?.kind === "account" && renaming.id === account.id;
   const found = matches.account(account.id);
 
@@ -476,7 +538,7 @@ function AccountBlock({ account, handle, matches }: { account: Account; handle: 
               {...handle.attributes}
               {...handle.listeners}
               style={handle.style}
-              active={active === viewKey(view)}
+              scoped={onMail && scopeHas(scope, item)}
               className={cn("ps-1.5", matches.active && found === 0 && NO_MATCHES)}
               leading={<AccountAvatar account={account} />}
               label={account.displayName || account.email}
@@ -516,7 +578,11 @@ function AccountBlock({ account, handle, matches }: { account: Account; handle: 
               }
               onContextMenu={menu.openAtPointer}
               onDoubleClick={() => setRenaming({ kind: "account", id: account.id })}
-              onActivate={() => go(view)}
+              onClick={(event) => {
+                event.preventDefault();
+                pickScope(item, event);
+              }}
+              onActivate={() => pickScope(item, { ctrlKey: false, metaKey: false })}
             />
           }
         />
@@ -601,7 +667,21 @@ function LabelRow({ label }: { label: Label }) {
   const renaming = useUi((s) => s.renaming);
   const setRenaming = useUi((s) => s.setRenaming);
   const menu = useRowMenu();
-  const view: ViewRef = { kind: "label", labelId: label.id, scope: { type: "all" } };
+  const dir = useDirectory();
+  const scope = useScope();
+  const view: ViewRef = { kind: "label", labelId: label.id, scope };
+  // Counted where the views look; a label with nothing there fades back.
+  let unread = label.unreadThreadCount;
+  let threads = label.threadCount;
+  if (scope.type !== "all") {
+    unread = 0;
+    threads = 0;
+    for (const a of scopeAccounts(scope, dir)) {
+      unread += label.byAccount[a.id]?.unread ?? 0;
+      threads += label.byAccount[a.id]?.threads ?? 0;
+    }
+  }
+  const empty = scope.type !== "all" && threads === 0 && active !== viewKey(view);
   if (renaming?.kind === "label" && renaming.id === label.id) {
     return (
       <InlineNameField
@@ -620,11 +700,11 @@ function LabelRow({ label }: { label: Label }) {
     <>
       <SidebarRow
         active={active === viewKey(view)}
-        className={cn(matches.active && found === 0 && NO_MATCHES)}
+        className={cn((matches.active ? found === 0 : empty) && NO_MATCHES)}
         leading={<ColorDot color={label.color} className="mx-1" />}
         label={label.name}
-        emphasized={matches.active ? found > 0 : label.unreadThreadCount > 0}
-        trailing={matches.active ? <MatchCount value={found} /> : <Count value={label.unreadThreadCount} />}
+        emphasized={matches.active ? found > 0 : unread > 0}
+        trailing={matches.active ? <MatchCount value={found} /> : <Count value={unread} />}
         actionsOpen={menu.open}
         actions={
           <RowIconButton

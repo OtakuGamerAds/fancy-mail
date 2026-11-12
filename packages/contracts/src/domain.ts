@@ -112,6 +112,8 @@ export const Label = z.object({
   sortOrder: z.number(),
   threadCount: z.number().int(),
   unreadThreadCount: z.number().int(),
+  /** The same counts per account, so a group's or an account's view counts its own. */
+  byAccount: z.record(z.string(), z.object({ threads: z.number().int(), unread: z.number().int() })),
 });
 export type Label = z.infer<typeof Label>;
 

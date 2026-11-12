@@ -18,6 +18,7 @@ import { IconButton, ShowSidebarButton } from "~/components/common";
 import { sidebarRowClass } from "~/components/sidebar/SidebarRow";
 import { cn } from "~/lib/utils";
 import { navigate, type SettingsSection } from "~/state/router";
+import { useUi } from "~/state/ui";
 import { AccountsSettings } from "./AccountsSettings";
 import { AgentsSettings } from "./AgentsSettings";
 import { GroupsLabelsSettings } from "./GroupsLabelsSettings";
@@ -71,7 +72,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
           <IconButton
             label="Close settings"
             shortcut="Esc"
-            onClick={() => navigate({ page: "mail", view: { kind: "inbox", scope: { type: "all" } }, threadId: null })}
+            onClick={() => navigate({ page: "mail", view: { kind: "inbox", scope: useUi.getState().scope }, threadId: null })}
           >
             <XIcon />
           </IconButton>
@@ -80,7 +81,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
           className="min-h-0 flex-1 overflow-y-auto"
           onKeyDown={(event) => {
             if (event.key === "Escape" && event.target === event.currentTarget) {
-              navigate({ page: "mail", view: { kind: "inbox", scope: { type: "all" } }, threadId: null });
+              navigate({ page: "mail", view: { kind: "inbox", scope: useUi.getState().scope }, threadId: null });
             }
           }}
         >
