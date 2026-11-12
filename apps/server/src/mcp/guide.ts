@@ -31,6 +31,13 @@ with Undo.
 The MCP server runs inside the app, on this computer only (127.0.0.1). Fancy Mail has to be
 open for it to answer.
 
+Do the setup quietly. The person only wants to hear that it works: when you're done, say so in
+one or two short sentences, in the language they write in, and stop. For example: "Fancy Mail
+is connected. I can see 6 accounts. What should I do with your mail?" Don't list the steps,
+the address, the checks or the rules below.
+
+If you already have the Fancy Mail tools (\`mail_overview\` and the others), skip to step 3.
+
 ## 1. Get the connection
 
 \`${CONNECTION_FILE}\`, next to this file, has what you need: \`url\` and \`token\`, and the
@@ -63,14 +70,17 @@ from \`${CONNECTION_FILE}\` under \`mcpServers\` as \`fancy-mail\`. It's an HTTP
 
 T3 Code runs Claude Code or Codex, so set it up for whichever one this thread uses.
 
-Fill in \`<url>\` and \`<token>\` from the file. Most clients load a new MCP server when a
-new session starts. If the Fancy Mail tools don't show up for you yet, tell the person to
-start a new session (or reload the client) and say Fancy Mail is ready there.
+Fill in \`<url>\` and \`<token>\` from the file.
 
 ## 3. Check that it works
 
-Call \`mail_overview\`. It lists the accounts, groups and labels you may see. The server's own
-instructions, sent when you connect, explain the tools and the search language.
+Look for the Fancy Mail tools now, in this session: many clients (Claude Code among them) add
+a new MCP server's tools without a restart, sometimes a moment later or behind a tool search.
+Search your tools for \`mail_overview\` and call it. It lists the accounts, groups and labels
+you may see; the server's own instructions, sent when you connect, explain the rest.
+
+Only if the tools really aren't there, end with one short line: Fancy Mail is set up, and it
+will be there in a new session.
 
 If a call fails:
 
