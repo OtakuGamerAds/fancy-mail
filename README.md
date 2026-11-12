@@ -17,6 +17,10 @@ only do what you allowed per account.
 - **One search language** everywhere — the search box, the sidebar views, the command palette
   (`Ctrl K`) and the agents all use it:
   `from:ads@ has:attachment after:2026-07-01 label:Invoices -label:Newsletters group:Banking`
+- **Settle what you're done with.** Hover a conversation and click **Settle**, swipe it to the
+  left, or press `Ctrl Shift S`. It folds into the **Settled** section at the bottom of the list
+  (one click opens it) and stays where it is in Gmail, with a **Settled** label. A new reply,
+  or one you send, brings it back. `is:settled` and `is:unsettled` search for them.
 - **Labels across accounts.** "Invoices" is one label for every account. On Gmail it is a real
   Gmail label, elsewhere an IMAP keyword — your organization survives this app.
 - **Signed in once.** Gmail with an app password (or Google sign-in), Outlook with Microsoft
@@ -25,7 +29,7 @@ only do what you allowed per account.
 - **Private by default.** Remote images in emails are blocked until you allow them, per
   message or per sender. Emails render in a sandbox, never with scripts.
 - **Undo everything.** Archive, trash, labels, read state — by you or by an agent.
-- **Keyboard first.** `c` compose · `/` search · `j`/`k` move · `e` archive · `#` trash ·
+- **Keyboard first.** `c` compose · `/` search · `j`/`k` move · `Ctrl Shift S` settle · `e` archive · `#` trash ·
   `s` star · `l` label · `r` reply · `z` undo · `?` all shortcuts.
 
 ## Agents (MCP)

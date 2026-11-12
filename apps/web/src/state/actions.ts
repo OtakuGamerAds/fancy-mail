@@ -4,6 +4,7 @@
  * ends in a toast with the server's summary and Undo.
  */
 import {
+  findSettledLabel,
   parseQuery,
   type Activity,
   type Bootstrap,
@@ -25,6 +26,8 @@ interface QueryShape {
   inValues: Set<string>;
   isUnread: boolean;
   isStarred: boolean;
+  /** is:settled (true), is:unsettled or -is:settled (false), neither (null). */
+  settled: boolean | null;
   labelValues: Set<string>;
 }
 
@@ -34,18 +37,19 @@ function shapeOf(query: string): QueryShape {
   const cached = shapeCache.get(query);
   if (cached) return cached;
   const parsed = parseQuery(query);
-  const shape: QueryShape = { inValues: new Set(), isUnread: false, isStarred: false, labelValues: new Set() };
+  const shape: QueryShape = { inValues: new Set(), isUnread: false, isStarred: false, settled: null, labelValues: new Set() };
   for (const term of parsed.terms) {
     if (term.kind === "in" && !term.negated) shape.inValues.add(term.value);
     if (term.kind === "is" && !term.negated && term.value === "unread") shape.isUnread = true;
     if (term.kind === "is" && !term.negated && term.value === "starred") shape.isStarred = true;
     if (term.kind === "label" && !term.negated) shape.labelValues.add(term.value.toLowerCase());
+    if (term.kind === "is" && (term.value === "settled" || term.value === "unsettled")) shape.settled = (term.value === "settled") !== term.negated;
   }
   shapeCache.set(query, shape);
   return shape;
 }
 
-function applyToSummary(thread: ThreadSummary, actions: ModifyAction[]): ThreadSummary {
+function applyToSummary(thread: ThreadSummary, actions: ModifyAction[], settledId: string | null): ThreadSummary {
   let next = thread;
   for (const action of actions) {
     switch (action.type) {
@@ -85,14 +89,28 @@ function applyToSummary(thread: ThreadSummary, actions: ModifyAction[]): ThreadS
       case "removeLabels":
         next = { ...next, labelIds: next.labelIds.filter((id) => !action.labelIds.includes(id)) };
         break;
+      case "settle":
+        // The first settle makes the label: until the server answers, the row stays put.
+        if (settledId) next = { ...next, unreadCount: 0, labelIds: [...new Set([...next.labelIds, settledId])] };
+        break;
+      case "unsettle":
+        if (settledId) next = { ...next, labelIds: next.labelIds.filter((id) => id !== settledId) };
+        break;
     }
   }
   return next;
 }
 
 /** Whether a changed conversation clearly no longer belongs in a list (it leaves at once). */
-function leavesList(query: string, before: ThreadSummary, after: ThreadSummary, labelNames: Map<string, string>): boolean {
+function leavesList(
+  query: string,
+  before: ThreadSummary,
+  after: ThreadSummary,
+  labelNames: Map<string, string>,
+  settledId: string | null,
+): boolean {
   const shape = shapeOf(query);
+  if (shape.settled !== null && settledId && after.labelIds.includes(settledId) !== shape.settled) return true;
   const anywhere = shape.inValues.has("anywhere");
   if (shape.inValues.has("inbox") && before.inInbox && !after.inInbox) return true;
   if (shape.inValues.has("archive") && after.inInbox) return true;
@@ -119,6 +137,7 @@ function applyOptimistic(threadIds: string[], actions: ModifyAction[]): Snapshot
   const ids = new Set(threadIds);
   const bootstrap = queryClient.getQueryData<Bootstrap>(qk.bootstrap);
   const labelNames = new Map((bootstrap?.labels ?? []).map((l) => [l.id, l.name]));
+  const settledId = findSettledLabel(bootstrap?.labels ?? [])?.id ?? null;
   const snapshot: Snapshot = { lists: [], details: [] };
 
   for (const [key, data] of queryClient.getQueriesData<ThreadPages>({ queryKey: qk.threadsAll })) {
@@ -135,8 +154,8 @@ function applyOptimistic(threadIds: string[], actions: ModifyAction[]): Snapshot
           continue;
         }
         changed = true;
-        const next = applyToSummary(thread, actions);
-        if (leavesList(query, thread, next, labelNames)) removed++;
+        const next = applyToSummary(thread, actions, settledId);
+        if (leavesList(query, thread, next, labelNames, settledId)) removed++;
         else threads.push(next);
       }
       return changed ? { ...page, threads } : page;
@@ -150,11 +169,11 @@ function applyOptimistic(threadIds: string[], actions: ModifyAction[]): Snapshot
     const detail = queryClient.getQueryData<ThreadDetail>(key);
     if (!detail) continue;
     snapshot.details.push([key, detail]);
-    const markRead = actions.some((a) => a.type === "markRead");
+    const markRead = actions.some((a) => a.type === "markRead" || a.type === "settle");
     const markUnread = actions.some((a) => a.type === "markUnread");
     queryClient.setQueryData<ThreadDetail>(key, {
       ...detail,
-      thread: applyToSummary(detail.thread, actions),
+      thread: applyToSummary(detail.thread, actions, settledId),
       messages: detail.messages.map((m, index) => ({
         ...m,
         unread: markRead ? false : markUnread && index === detail.messages.length - 1 ? true : m.unread,

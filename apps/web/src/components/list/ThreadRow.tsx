@@ -2,11 +2,14 @@
  * One conversation in the list. Comfortable: two lines in 68 px (people · date, labels then
  * subject — snippet). Compact: one line in 40 px. Hover shows quick actions where the date is;
  * the checkbox takes the unread dot's place on hover or while anything is checked.
+ * Settled conversations are dimmed until hovered. Swiping a row to the left settles it (or
+ * un-settles a settled one).
  */
 import type { ThreadSummary } from "@fancy-mail/contracts";
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
+  CheckIcon,
   MailIcon,
   MailOpenIcon,
   PaperclipIcon,
@@ -21,6 +24,7 @@ import { CheckboxMark } from "~/components/ui/checkbox";
 import { displayName } from "~/lib/addresses";
 import { formatExact, formatListDate } from "~/lib/format";
 import { cn } from "~/lib/utils";
+import { useSwipeAction } from "~/hooks/useSwipeAction";
 import { runThreadCommand, toggleStar } from "~/state/commands";
 import type { Directory } from "~/state/queries";
 
@@ -53,9 +57,34 @@ interface ThreadRowProps {
   showAccount: boolean;
   /** Hide this label's chip (the view is that label). */
   hideLabelId: string | null;
+  /** Carries the Settled label: dimmed, and its action is Un-settle. */
+  settled: boolean;
+  /** Can be settled here (not a new message being written, not in the trash or spam). */
+  settleable: boolean;
   onRowClick(event: ReactMouseEvent, thread: ThreadSummary): void;
   onToggleCheck(event: ReactMouseEvent, thread: ThreadSummary): void;
   onContextMenu(event: ReactMouseEvent, thread: ThreadSummary): void;
+}
+
+/** Settle / Un-settle on hover: a word, not just an icon, as T3 Code's thread rows have. */
+function SettleAction({ settled, onClick }: { settled: boolean; onClick(): void }) {
+  const label = settled ? "Un-settle" : "Settle";
+  return (
+    <button
+      type="button"
+      aria-label={`${label} conversation`}
+      title={`${label} conversation (Ctrl+Shift+S)`}
+      className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-muted-foreground text-xs outline-none hover:bg-white/8 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      onDoubleClick={(event) => event.stopPropagation()}
+    >
+      {settled ? <Undo2Icon className="size-3.5" /> : <CheckIcon className="size-3.5" />}
+      {label}
+    </button>
+  );
 }
 
 function QuickAction({ label, onClick, children }: { label: string; onClick(): void; children: React.ReactNode }) {
@@ -86,10 +115,14 @@ export const ThreadRow = memo(function ThreadRow({
   selectionMode,
   showAccount,
   hideLabelId,
+  settled,
+  settleable,
   onRowClick,
   onToggleCheck,
   onContextMenu,
 }: ThreadRowProps) {
+  const settle = () => void runThreadCommand(settled ? "unsettle" : "settle", [thread.id]);
+  const swipe = useSwipeAction(settleable ? settle : null);
   const unread = thread.unreadCount > 0;
   const account = dir.accountById.get(thread.accountId);
   const labels = thread.labelIds
@@ -131,6 +164,7 @@ export const ThreadRow = memo(function ThreadRow({
       <QuickAction label={thread.starred ? "Unstar (S)" : "Star (S)"} onClick={() => toggleStar([thread.id])}>
         <StarIcon className={cn(thread.starred && "fill-amber-400 text-amber-400")} />
       </QuickAction>
+      {settleable ? <SettleAction settled={settled} onClick={settle} /> : null}
     </span>
   );
 
@@ -179,7 +213,7 @@ export const ThreadRow = memo(function ThreadRow({
     <span className={cn("flex min-w-0 items-center gap-1.5", compact ? "w-[32%] min-w-24 max-w-48 shrink-0" : "flex-1")}>
       {showAccount && account ? (
         // The account's avatar, as in the sidebar (a dot would read as the unread dot).
-        <span title={account.email} className="flex shrink-0">
+        <span title={account.email} className={cn("flex shrink-0", settled && "opacity-50 grayscale group-hover/thread:opacity-100 group-hover/thread:grayscale-0")}>
           <AccountAvatar account={account} size={16} />
         </span>
       ) : null}
@@ -215,17 +249,20 @@ export const ThreadRow = memo(function ThreadRow({
     </span>
   );
 
-  return (
+  const row = (
     <div
       role="option"
       aria-selected={open}
       data-thread-id={thread.id}
       data-focused={focused || undefined}
+      data-settled={settled || undefined}
       className={cn(
         "group/thread relative flex w-full cursor-pointer select-none items-center gap-2 border-border/50 border-b ps-2 pe-3 text-sm",
         compact ? "h-10" : "h-[68px]",
         open ? "bg-white/[0.075]" : checked ? "bg-primary/10" : "hover:bg-white/[0.035]",
         focused && "shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--ring)_75%,transparent)]",
+        // Settled: everything muted until hovered (as T3 Code's settled threads).
+        settled && !open && "[&:not(:hover):not(:focus-within)_*]:text-muted-foreground/80",
       )}
       onClick={(event) => onRowClick(event, thread)}
       onContextMenu={(event) => onContextMenu(event, thread)}
@@ -262,6 +299,39 @@ export const ThreadRow = memo(function ThreadRow({
           {quickActions}
         </span>
       </span>
+    </div>
+  );
+
+  const { offset, armed, dragging } = swipe.state;
+  const SwipeIcon = settled ? Undo2Icon : CheckIcon;
+  return (
+    <div className="relative h-full touch-pan-y overflow-hidden" {...swipe.handlers}>
+      {offset < 0 ? (
+        // What a swipe uncovers: the action, armed (stronger) once letting go would run it.
+        <div
+          aria-hidden
+          className={cn(
+            "absolute inset-0 flex items-center justify-end gap-2 pe-5 font-medium text-xs transition-colors duration-150",
+            armed ? "bg-primary/25 text-foreground" : "bg-primary/10 text-muted-foreground",
+          )}
+        >
+          {settled ? "Un-settle" : "Settle"}
+          <span
+            className={cn(
+              "grid size-8 place-items-center rounded-full bg-primary text-primary-foreground transition-transform duration-150",
+              armed ? "scale-110" : "scale-90",
+            )}
+          >
+            <SwipeIcon className="size-4" />
+          </span>
+        </div>
+      ) : null}
+      <div
+        className={cn("h-full bg-background", !dragging && "transition-transform duration-200 ease-out")}
+        style={offset !== 0 ? { transform: `translateX(${offset}px)` } : undefined}
+      >
+        {row}
+      </div>
     </div>
   );
 });

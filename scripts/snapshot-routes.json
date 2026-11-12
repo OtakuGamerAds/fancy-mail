@@ -10,6 +10,9 @@
   "routes": [
     { "name": "inbox", "hash": "#/inbox" },
     { "name": "unread", "hash": "#/unread" },
+    { "name": "inbox-settled-open", "hash": "#/inbox", "click": "[data-section=settled] button" },
+    { "name": "settled-group-open", "hash": "#/g/{group:Banking}/inbox", "click": "[data-section=settled] button" },
+    { "name": "settled-group", "hash": "#/g/{group:Banking}/inbox" },
     { "name": "inbox-promotions", "hash": "#/inbox", "click": "[aria-label='Inbox tabs'] [role=tab]:nth-child(2)" },
     { "name": "group-banking", "hash": "#/g/{group:Banking}/inbox" },
     { "name": "account-inbox", "hash": "#/a/{account:billing@brightwave.example}/inbox" },

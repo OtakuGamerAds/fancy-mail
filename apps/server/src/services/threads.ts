@@ -15,6 +15,7 @@ import type { CallContext } from "./context.ts";
 import { invalidate, notifyOutbox, writeActivity } from "./env.ts";
 import type { ServiceEnv } from "./env.ts";
 import { applyDeltas, invertDelta, locationsOf, outboxOpsFor, planAction, summarize } from "./mutate.ts";
+import { ensureSettledLabel } from "./settled.ts";
 import type { MessageDelta } from "./mutate.ts";
 
 const DEFAULT_LIMIT = 50;
@@ -79,6 +80,16 @@ export function applyChange(
   }
   notifyOutbox(env, outboxAccounts);
   return { threadIds: [...threadIds], accountIds: [...accountIds], undoSteps };
+}
+
+/**
+ * New mail in a settled conversation (a reply, or one you sent): it isn't settled any more. No
+ * Activity entry (nobody did it); the label also comes off on the server.
+ */
+export function unsettleThreads(env: ServiceEnv, threadIds: string[]): string[] {
+  if (threadIds.length === 0) return [];
+  return applyChange(env, [{ action: "unsettle", plan: () => planAction({ store: env.store, now: env.now }, threadIds, { type: "unsettle" }).deltas }])
+    .threadIds;
 }
 
 /** Applies a stored undo (or any list of delta steps) as-is. */
@@ -278,9 +289,11 @@ export function createThreadsService(env: ServiceEnv) {
       }
 
       const mutateEnv = { store, now: env.now };
+      let labelCreated = false;
       const createdMailboxes: { accountId: string; mailbox: { id: string; path: string; role: string | null } }[] = [];
       let activity: Activity | null = null;
       const result = env.db.tx(() => {
+        if (actions.some((a) => a.type === "settle")) labelCreated = ensureSettledLabel(store, env.now()).created;
         const change = applyChange(
           env,
           actions.map((action) => ({
@@ -316,8 +329,14 @@ export function createThreadsService(env: ServiceEnv) {
         invalidate(env, ["threads", "accounts", "groups", "mailboxes", "labels", "activity"], result.threadIds);
       }
       if (createdMailboxes.length > 0) invalidate(env, ["mailboxes"]);
+      if (labelCreated && result.threadIds.length === 0) invalidate(env, ["labels"]);
       if (activity) env.bus.publish({ type: "activity", activity });
       return { activity };
+    },
+
+    /** Sync engine: these got new mail, so they aren't settled any more. */
+    unsettle(threadIds: string[]): string[] {
+      return unsettleThreads(env, threadIds);
     },
 
     /** Re-derives cached thread rows (sync engine and tests). */

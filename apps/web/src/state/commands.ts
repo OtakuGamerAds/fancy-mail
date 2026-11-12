@@ -7,9 +7,10 @@ import type { ModifyAction, ThreadSummary } from "@fancy-mail/contracts";
 
 import { modifyThreads } from "./actions";
 import { listNav, neighborAfterRemoving } from "./listNav";
-import { findCachedThread } from "./queries";
+import { directoryOf, findCachedThread, qk, queryClient } from "./queries";
 import { navigate } from "./router";
 import { useUi } from "./ui";
+import { splitsSettled } from "./view";
 
 export type ThreadCommand =
   | "archive"
@@ -21,7 +22,9 @@ export type ThreadCommand =
   | "markRead"
   | "markUnread"
   | "star"
-  | "unstar";
+  | "unstar"
+  | "settle"
+  | "unsettle";
 
 const LEAVES_VIEW: Partial<Record<ThreadCommand, true>> = {
   archive: true,
@@ -30,6 +33,7 @@ const LEAVES_VIEW: Partial<Record<ThreadCommand, true>> = {
   markSpam: true,
   notSpam: true,
   moveToInbox: true,
+  settle: true,
 };
 
 /** Whether the command removes the conversation from what the person is looking at. */
@@ -38,6 +42,7 @@ function leavesCurrentView(command: ThreadCommand): boolean {
   const route = useUi.getState().route;
   if (route.page !== "mail") return false;
   const kind = route.view.kind;
+  if (command === "settle") return splitsSettled(route.view, useUi.getState().search);
   if (command === "moveToInbox") return kind === "archive";
   if (command === "archive") return kind === "inbox" || kind === "unread";
   if (command === "restore") return kind === "trash";
@@ -52,13 +57,16 @@ export async function runThreadCommand(command: ThreadCommand, threadIds: string
   const openId = route.page === "mail" ? route.threadId : null;
 
   if (route.page === "mail" && leavesCurrentView(command)) {
-    // Move the reader and the keyboard focus on before the rows disappear.
+    // Move the reader and the keyboard focus on before the rows disappear (after settling, to
+    // the next one that isn't settled).
+    const settledId = command === "settle" ? directoryOf(queryClient.getQueryData(qk.bootstrap)).settledLabelId : null;
+    const skip = settledId ? (t: ThreadSummary) => isSettled(t, settledId) : undefined;
     if (openId && threadIds.includes(openId)) {
-      const next = neighborAfterRemoving(threadIds, openId);
+      const next = neighborAfterRemoving(threadIds, openId, skip);
       navigate({ ...route, threadId: next }, { replace: true });
     }
     if (ui.focusedThreadId && threadIds.includes(ui.focusedThreadId)) {
-      ui.setFocusedThread(neighborAfterRemoving(threadIds, ui.focusedThreadId));
+      ui.setFocusedThread(neighborAfterRemoving(threadIds, ui.focusedThreadId, skip));
     }
     ui.setSelection(ui.selection.filter((id) => !threadIds.includes(id)));
   }
@@ -75,6 +83,19 @@ export function toggleStar(ids: string[]) {
   const list = summaries(ids);
   const allStarred = list.length > 0 && list.every((t) => t.starred);
   void runThreadCommand(allStarred ? "unstar" : "star", ids);
+}
+
+/** Whether a conversation carries the Settled label. */
+export function isSettled(thread: Pick<ThreadSummary, "labelIds">, settledLabelId: string | null): boolean {
+  return settledLabelId !== null && thread.labelIds.includes(settledLabelId);
+}
+
+/** Settle all, unless all are settled already (then un-settle). */
+export function toggleSettle(ids: string[]) {
+  const settledId = directoryOf(queryClient.getQueryData(qk.bootstrap)).settledLabelId;
+  const list = summaries(ids);
+  const allSettled = list.length > 0 && list.every((t) => isSettled(t, settledId));
+  void runThreadCommand(allSettled ? "unsettle" : "settle", ids);
 }
 
 /** Mark read, unless all are read already (then unread). */

@@ -15,6 +15,7 @@
  * Restore and not-spam return messages to where they were (remembered on the message), or to
  * the inbox.
  */
+import { findSettledLabel } from "@fancy-mail/contracts";
 import type { MailboxRole, ModifyAction } from "@fancy-mail/contracts";
 
 import { newId } from "../db/ids.ts";
@@ -178,6 +179,7 @@ export function planAction(
   const states = loadStates(env.store, threadIds);
   const boxes = mailboxResolver(env);
   const deltas: MessageDelta[] = [];
+  const settledLabelId = findSettledLabel(env.store.labels.list())?.id ?? null;
   const gmailCache = new Map<string, boolean>();
   const isGmail = (accountId: string) => {
     if (!gmailCache.has(accountId)) gmailCache.set(accountId, boxes.byRole(accountId, "all") !== null);
@@ -284,6 +286,20 @@ export function planAction(
         }
         break;
       }
+      case "settle":
+        // Every message carries the label (so it shows in Gmail on any of them) and is read.
+        if (!settledLabelId) break;
+        for (const s of thread) {
+          const d = blank(s.message.id);
+          if (!s.labels.has(settledLabelId)) d.addLabels.push(settledLabelId);
+          if (s.message.unread) d.unread = false;
+          if (!isEmpty(d)) deltas.push(d);
+        }
+        break;
+      case "unsettle":
+        if (!settledLabelId) break;
+        for (const s of thread) if (s.labels.has(settledLabelId)) deltas.push({ ...blank(s.message.id), removeLabels: [settledLabelId] });
+        break;
       case "addLabels":
       case "removeLabels": {
         const adding = action.type === "addLabels";
@@ -494,6 +510,10 @@ export function summarize(actions: ModifyAction[], count: number, labelName: (id
         return `Reported ${n} as spam`;
       case "notSpam":
         return `Marked ${n} as not spam`;
+      case "settle":
+        return `Settled ${n}`;
+      case "unsettle":
+        return `Un-settled ${n}`;
       case "addLabels":
         return `Labeled ${n} ${quoteList(a.labelIds.map(labelName))}`;
       case "removeLabels":

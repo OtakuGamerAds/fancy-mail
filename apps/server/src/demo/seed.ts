@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { COLOR_PALETTE } from "@fancy-mail/contracts";
+import { COLOR_PALETTE, findSettledLabel } from "@fancy-mail/contracts";
 import type { Actor, Address, ModifyAction } from "@fancy-mail/contracts";
 
 import { idFromBytes } from "../db/ids.ts";
@@ -15,6 +15,7 @@ import { safeFilename } from "../services/files.ts";
 import type { ServiceEnv } from "../services/env.ts";
 import { writeActivity } from "../services/env.ts";
 import { planAction, summarize } from "../services/mutate.ts";
+import { ensureSettledLabel } from "../services/settled.ts";
 import { applyChange } from "../services/threads.ts";
 import type { MailboxRecord } from "../store/types.ts";
 import * as content from "./content.ts";
@@ -679,6 +680,17 @@ function seedActivity(env: ServiceEnv, input: { now: number; rng: Rng; byKind: M
     inInbox((input.byKind.get(kind) ?? []).map((t) => t.threadId)).filter((tid) => (store.threads.get(tid)?.unread_count ?? 0) > 0);
   const toRead = [...unread("bank"), ...unread("shipping"), ...unread("platform")].slice(0, 5);
   record({ kind: "user" }, input.now - 2 * DAY, toRead, [{ type: "markRead" }], undefined, true);
+
+  // Done with: most read inbox mail older than a few days is settled (the Settled section).
+  const all = [...new Set([...input.byKind.values()].flat().map((t) => t.threadId))];
+  const done = inInbox(all).filter((tid) => {
+    const row = store.threads.get(tid);
+    return row !== null && row.unread_count === 0 && row.starred === 0 && row.draft_count === 0 && input.now - row.last_message_at > 3 * DAY;
+  });
+  if (done.length > 0) {
+    ensureSettledLabel(store, input.now - 3 * DAY);
+    record({ kind: "user" }, input.now - DAY, done.filter((_, i) => i % 5 !== 0), [{ type: "settle" }]);
+  }
 }
 
 /** Deletes every demo account with its mail, files and activity. Labels stay. */
@@ -699,6 +711,9 @@ export function removeDemo(env: ServiceEnv): string[] {
     const labels = kept
       ? (JSON.parse(kept) as string[])
       : DEMO_LABELS.map((l) => store.labels.findByName(l.name)?.id).filter((x): x is string => !!x);
+    // Settled too, when only demo mail carried it (it comes back with the next settle).
+    const settled = findSettledLabel(store.labels.list());
+    if (settled) labels.push(settled.id);
     for (const labelId of labels) {
       if (store.labels.get(labelId) && store.labels.messagesWithLabel(labelId).length === 0) store.labels.delete(labelId);
     }

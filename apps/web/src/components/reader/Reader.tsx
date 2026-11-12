@@ -5,6 +5,7 @@
 import type { Message, ThreadDetail } from "@fancy-mail/contracts";
 import {
   ArchiveIcon,
+  CheckIcon,
   ArchiveRestoreIcon,
   ArrowLeftIcon,
   LinkIcon,
@@ -33,7 +34,7 @@ import { textDirection } from "~/lib/textDirection";
 import { cn, plural } from "~/lib/utils";
 import { errorMessage } from "~/rpc/client";
 import { modifyThreads } from "~/state/actions";
-import { runThreadCommand, toggleStar } from "~/state/commands";
+import { isSettled, runThreadCommand, toggleStar } from "~/state/commands";
 import { useDirectory, useThread } from "~/state/queries";
 import { formatRoute, type Route } from "~/state/router";
 import { useUi } from "~/state/ui";
@@ -245,8 +246,22 @@ function Toolbar({ detail, onClose }: { detail: ThreadDetail; onClose(): void })
   const { thread } = detail;
   const ids = [thread.id];
   const unread = thread.unreadCount > 0;
+  const settled = isSettled(thread, useDirectory().settledLabelId);
   return (
     <div className="flex shrink-0 items-center gap-0.5 pt-0.5">
+      {!thread.inTrash && !thread.inSpam ? (
+        // Done with it: the first thing here, in words (as T3 Code's Settle).
+        <Button
+          variant="ghost-muted"
+          size="compact"
+          className="me-1"
+          title={`${settled ? "Un-settle" : "Settle"} (Ctrl+Shift+S)`}
+          onClick={() => void runThreadCommand(settled ? "unsettle" : "settle", ids)}
+        >
+          {settled ? <Undo2Icon /> : <CheckIcon />}
+          {settled ? "Un-settle" : "Settle"}
+        </Button>
+      ) : null}
       {thread.inInbox ? (
         <IconButton label="Archive" shortcut="E" onClick={() => void runThreadCommand("archive", ids)}>
           <ArchiveIcon />

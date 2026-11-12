@@ -105,6 +105,26 @@ export type Group = z.infer<typeof Group>;
  * mirrored to a real Gmail label of the same name, on other IMAP servers to a keyword, so the
  * organization survives even if this app is gone.
  */
+/**
+ * Fancy Mail's own label: a conversation you are done with carries it (Gmail and other apps show
+ * it as a plain label). The name is reserved: it can't be given to another label.
+ */
+export const SETTLED_LABEL = "Settled";
+
+/** Label names kept for Fancy Mail's own use. */
+export const RESERVED_LABELS: readonly string[] = [SETTLED_LABEL];
+
+export function isReservedLabelName(name: string): boolean {
+  const lower = name.trim().toLocaleLowerCase();
+  return RESERVED_LABELS.some((r) => r.toLocaleLowerCase() === lower);
+}
+
+/** The Settled label among these, if it exists yet (made the first time something is settled). */
+export function findSettledLabel<T extends { name: string }>(labels: readonly T[]): T | null {
+  const lower = SETTLED_LABEL.toLocaleLowerCase();
+  return labels.find((l) => l.name.trim().toLocaleLowerCase() === lower) ?? null;
+}
+
 export const Label = z.object({
   id: z.string(),
   name: z.string(),

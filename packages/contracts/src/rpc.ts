@@ -43,6 +43,9 @@ export const ModifyAction = z.discriminatedUnion("type", [
   z.object({ type: z.literal("restore") }),
   z.object({ type: z.literal("markSpam") }),
   z.object({ type: z.literal("notSpam") }),
+  /** Done with it: the Settled label on every message, and read. Stays where it is. */
+  z.object({ type: z.literal("settle") }),
+  z.object({ type: z.literal("unsettle") }),
   z.object({ type: z.literal("addLabels"), labelIds: z.array(z.string()).min(1) }),
   z.object({ type: z.literal("removeLabels"), labelIds: z.array(z.string()).min(1) }),
 ]);

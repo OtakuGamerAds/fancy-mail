@@ -15,6 +15,7 @@ import {
   COLOR_PALETTE,
   QUERY_SYNTAX_HELP,
   agentAccessAllows,
+  isReservedLabelName,
   type Actor,
   type Address,
   type AgentAccess,
@@ -183,6 +184,8 @@ const ACTION_NAMES = [
   "restore",
   "mark_spam",
   "not_spam",
+  "settle",
+  "unsettle",
 ] as const;
 
 const SIMPLE_ACTIONS: Record<string, ModifyAction["type"]> = {
@@ -196,6 +199,8 @@ const SIMPLE_ACTIONS: Record<string, ModifyAction["type"]> = {
   restore: "restore",
   mark_spam: "markSpam",
   not_spam: "notSpam",
+  settle: "settle",
+  unsettle: "unsettle",
 };
 
 // ── The server ──────────────────────────────────────────────────────────────────────────────
@@ -408,7 +413,7 @@ export function buildMcpServer(api: McpMailApi, actor: () => Actor, version: str
       {
         title: "Organize conversations",
         description:
-          'Apply actions to conversations, given by thread_ids or by a query (every match, up to max_threads). Actions run in order: add_labels/remove_labels (with labels: names), mark_read, mark_unread, star, unstar, archive (out of the inbox, kept in All mail), move_to_inbox, trash, restore, mark_spam, not_spam. Missing labels are created unless create_missing_labels is false. Returns what changed and an activity id; the user sees it in Activity and either of you can undo it with mail_activity. Example: {"query": "from:adpilot.example has:attachment -label:Invoices", "actions": [{"type": "add_labels", "labels": ["Invoices"]}, {"type": "archive"}]}',
+          'Apply actions to conversations, given by thread_ids or by a query (every match, up to max_threads). Actions run in order: add_labels/remove_labels (with labels: names), mark_read, mark_unread, star, unstar, archive (out of the inbox, kept in All mail), move_to_inbox, trash, restore, mark_spam, not_spam, settle (the user is done with it: the Settled label, and read; it stays where it is), unsettle. Missing labels are created unless create_missing_labels is false. Returns what changed and an activity id; the user sees it in Activity and either of you can undo it with mail_activity. Example: {"query": "from:adpilot.example has:attachment -label:Invoices", "actions": [{"type": "add_labels", "labels": ["Invoices"]}, {"type": "archive"}]}',
         inputSchema: {
           thread_ids: z.array(z.string()).min(1).max(500).optional(),
           query: z.string().optional().describe("act on every conversation this query matches"),
@@ -487,6 +492,11 @@ export function buildMcpServer(api: McpMailApi, actor: () => Actor, version: str
               if (!action.labels?.length) return fail(`${action.type} needs labels, e.g. {"type": "${action.type}", "labels": ["Invoices"]}.`);
               const labelIds: string[] = [];
               for (const name of action.labels) {
+                // The Settled label means settle / unsettle (it is Fancy Mail's own).
+                if (isReservedLabelName(name)) {
+                  modify.push({ type: action.type === "add_labels" ? "settle" : "unsettle" });
+                  continue;
+                }
                 let label = findLabel(api, name);
                 if (!label && action.type === "add_labels" && create_missing_labels) {
                   label = api.createLabel({ name: name.trim(), color: null }, actor());
@@ -497,7 +507,7 @@ export function buildMcpServer(api: McpMailApi, actor: () => Actor, version: str
                 }
                 labelIds.push(label.id);
               }
-              modify.push({ type: action.type === "add_labels" ? "addLabels" : "removeLabels", labelIds });
+              if (labelIds.length > 0) modify.push({ type: action.type === "add_labels" ? "addLabels" : "removeLabels", labelIds });
             } else {
               modify.push({ type: SIMPLE_ACTIONS[action.type]! } as ModifyAction);
             }

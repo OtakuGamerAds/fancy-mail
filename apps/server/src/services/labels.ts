@@ -1,3 +1,4 @@
+import { isReservedLabelName } from "@fancy-mail/contracts";
 import type { Label } from "@fancy-mail/contracts";
 
 import { newId } from "../db/ids.ts";
@@ -8,6 +9,7 @@ import { requireAnyAccess, visibleAccountIds } from "./context.ts";
 import type { CallContext } from "./context.ts";
 import { invalidate, notifyOutbox, writeActivity } from "./env.ts";
 import type { ServiceEnv } from "./env.ts";
+import { ensureSettledLabel } from "./settled.ts";
 import { applyChange } from "./threads.ts";
 import type { MessageDelta } from "./mutate.ts";
 
@@ -33,7 +35,13 @@ export function createLabelsService(env: ServiceEnv) {
     if (!clean) throw new AppError("bad_request", "A label needs a name.");
     if (clean.length > 100) throw new AppError("bad_request", "Label names can be at most 100 characters.");
     if (RESERVED.has(clean.toLowerCase())) throw new AppError("bad_request", `"${clean}" is reserved by search (label:none). Pick another name.`);
+    if (isReservedLabelName(clean)) throw new AppError("bad_request", `"${clean}" is kept for settled conversations. Pick another name.`);
     return clean;
+  }
+
+  /** Fancy Mail's own labels keep their name and can't be deleted (they'd come back on the next settle). */
+  function requireOrdinary(record: LabelRecord, what: string): void {
+    if (isReservedLabelName(record.name)) throw new AppError("bad_request", `${record.name} is Fancy Mail's own label, so it can't be ${what}.`);
   }
 
   function toLabel(record: LabelRecord, counts: Map<string, LabelCounts>): Label {
@@ -117,6 +125,12 @@ export function createLabelsService(env: ServiceEnv) {
 
     /** The label with this name, created when missing. */
     ensure(name: string, ctx: CallContext): Label {
+      if (isReservedLabelName(name)) {
+        requireAnyAccess(ctx, store.accounts.list(), "organize", "Settling conversations");
+        const { label, created } = env.db.tx(() => ensureSettledLabel(store, env.now()));
+        if (created) invalidate(env, ["labels"]);
+        return toLabel(label, counts(ctx));
+      }
       const existing = store.labels.findByName(name.replace(/\s+/g, " ").trim());
       if (existing) return toLabel(existing, counts(ctx));
       return service.create({ name }, ctx);
@@ -125,6 +139,7 @@ export function createLabelsService(env: ServiceEnv) {
     update(input: { labelId: string; name?: string; color?: string | null }, ctx: CallContext): Label {
       requireAnyAccess(ctx, store.accounts.list(), "organize", "Changing labels");
       const before = requireLabel(input.labelId);
+      if (input.name !== undefined && input.name.trim() !== before.name) requireOrdinary(before, "renamed");
       const name = input.name !== undefined ? cleanName(input.name) : undefined;
       const color = validColor(input.color, "The label");
       const renamed = name !== undefined && name !== before.name;
@@ -154,6 +169,7 @@ export function createLabelsService(env: ServiceEnv) {
     delete(input: { labelId: string }, ctx: CallContext): { removedFrom: number } {
       requireAnyAccess(ctx, store.accounts.list(), "organize", "Deleting labels");
       const label = requireLabel(input.labelId);
+      requireOrdinary(label, "deleted");
       const tagged = store.labels.messagesWithLabel(label.id);
       const threadIds = [...new Set(tagged.map((t) => t.threadId))];
       let outboxAccounts: string[] = [];

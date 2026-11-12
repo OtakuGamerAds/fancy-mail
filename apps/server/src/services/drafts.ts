@@ -8,6 +8,7 @@ import { agentDisplayName, canSee, isAgent, requireAccess, visibleAccountIds } f
 import type { CallContext } from "./context.ts";
 import { invalidate, notifyOutbox, writeActivity } from "./env.ts";
 import type { ServiceEnv } from "./env.ts";
+import { unsettleThreads } from "./threads.ts";
 
 export type DraftUndo = { type: "draftCreate"; draftId: string };
 
@@ -333,6 +334,8 @@ export function createDraftsService(env: ServiceEnv) {
         store.refreshThreads([draft.threadId, ...extraThreadIds]);
       });
       invalidate(env, ["drafts", "threads", "mailboxes", "accounts"], [draft.threadId, ...extraThreadIds]);
+      // You wrote again: you're waiting for an answer, so it isn't settled.
+      unsettleThreads(env, [...new Set([draft.threadId, ...extraThreadIds])].filter((t) => store.threads.get(t) !== null));
       env.bus.publish({ type: "draftSent", draftId: id, ok: true, error: null });
     },
 

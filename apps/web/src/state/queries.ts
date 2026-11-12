@@ -2,6 +2,7 @@
  * The query cache is the client's copy of the server. Nothing goes stale by time: the server
  * says what changed (`invalidate` events) and after a reconnect everything is refetched.
  */
+import { findSettledLabel, isReservedLabelName } from "@fancy-mail/contracts";
 import type { Account, Bootstrap, Group, Label, ThreadDetail, ThreadSummary } from "@fancy-mail/contracts";
 import {
   keepPreviousData,
@@ -165,12 +166,15 @@ export function findCachedThread(threadId: string): ThreadSummary | undefined {
 export interface Directory {
   accounts: Account[];
   groups: Group[];
+  /** The person's labels (Fancy Mail's own, like Settled, are left out). */
   labels: Label[];
   accountById: Map<string, Account>;
   groupById: Map<string, Group>;
   labelById: Map<string, Label>;
   /** Lower-cased addresses of every account: "me". */
   ownAddresses: Set<string>;
+  /** The Settled label (null until something is settled). */
+  settledLabelId: string | null;
 }
 
 let directoryCache: { source: Bootstrap | undefined; value: Directory } | null = null;
@@ -179,7 +183,8 @@ export function directoryOf(bootstrap: Bootstrap | undefined): Directory {
   if (directoryCache && directoryCache.source === bootstrap) return directoryCache.value;
   const accounts = [...(bootstrap?.accounts ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
   const groups = [...(bootstrap?.groups ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
-  const labels = [...(bootstrap?.labels ?? [])].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  const all = bootstrap?.labels ?? [];
+  const labels = all.filter((l) => !isReservedLabelName(l.name)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
   const value: Directory = {
     accounts,
     groups,
@@ -188,6 +193,7 @@ export function directoryOf(bootstrap: Bootstrap | undefined): Directory {
     groupById: new Map(groups.map((g) => [g.id, g])),
     labelById: new Map(labels.map((l) => [l.id, l])),
     ownAddresses: new Set(accounts.map((a) => a.email.toLowerCase())),
+    settledLabelId: findSettledLabel(all)?.id ?? null,
   };
   directoryCache = { source: bootstrap, value };
   return value;

@@ -3,12 +3,17 @@
  * bar while rows are checked), the filter chips with the search that narrows it (typed in the
  * sidebar), and the virtualized rows. New messages still being written sit at the top of
  * their inbox. When the view or the search changes, the new rows slide in.
+ *
+ * Settled conversations fold into the Settled section at the bottom, as in T3 Code's sidebar:
+ * its header stays at the foot of the pane (sticky) with the count; opened, they follow the
+ * rest, dimmed, in a list of their own. Searching shows everything in place.
  */
 import type { Draft, InboxTab, ThreadSummary } from "@fancy-mail/contracts";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
+  CircleCheckIcon,
   InboxIcon,
   InfoIcon,
   MailIcon,
@@ -26,7 +31,7 @@ import {
   XIcon,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 
 import { IconButton, ShowSidebarButton } from "~/components/common";
 import { LabelPickerContent, LabelPickerPopover } from "~/components/LabelPicker";
@@ -35,22 +40,23 @@ import { ROW_HEIGHT, ThreadRow } from "~/components/list/ThreadRow";
 import { useRowMenu } from "~/components/sidebar/EntityMenus";
 import { Button } from "~/components/ui/button";
 import { CheckboxMark } from "~/components/ui/checkbox";
+import { CollapsibleSectionHeader } from "~/components/ui/collapsible-section-header";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuSub, MenuSubPopup, MenuSubTrigger } from "~/components/ui/menu";
 import { Skeleton } from "~/components/ui/skeleton";
 import { useDebounced } from "~/hooks/useDebounced";
 import { formatCount } from "~/lib/format";
 import { splitDraftBody } from "~/lib/plainText";
-import { cn, plural } from "~/lib/utils";
+import { cn, plural, safeStorage } from "~/lib/utils";
 import { errorMessage } from "~/rpc/client";
-import { archiveOrInbox, runThreadCommand, spamOrNot, toggleRead, toggleStar, trashOrRestore } from "~/state/commands";
+import { archiveOrInbox, isSettled, runThreadCommand, spamOrNot, toggleRead, toggleSettle, toggleStar, trashOrRestore } from "~/state/commands";
 import { listNav } from "~/state/listNav";
 import { openConversation } from "~/state/openConversation";
 import { useBootstrap, useDirectory, useDrafts, useSearchFacets, useThreads } from "~/state/queries";
 import { currentRoute, navigateBackTo, viewKey, type ViewRef } from "~/state/router";
 import { useUi, type InboxTabId, type ListFilter } from "~/state/ui";
 import { goScope } from "~/state/scope";
-import { describeView, inboxTabQuery, inScope, listQuery, searchWidens } from "~/state/view";
+import { describeView, inboxTabQuery, inScope, listQuery, searchWidens, splitsSettled } from "~/state/view";
 
 const FILTERS: { id: ListFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -68,6 +74,9 @@ const INBOX_TABS: Record<InboxTabId, { label: string; icon: LucideIcon }> = {
 };
 
 const EXAMPLES = ["from:anna has:attachment", "is:unread newer_than:7d"];
+
+/** The Settled section is open (remembered, as T3 Code remembers its shelf). */
+const SETTLED_OPEN_KEY = "fancy-mail:list:settled-open";
 
 /** How long rows that arrive after a change keep their entrance (rows scrolled into view later don't). */
 const ENTER_WINDOW_MS = 450;
@@ -119,8 +128,26 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
   const storedTab = useUi((s) => s.inboxTab);
   const tab: InboxTabId = hasTabs && (storedTab === "primary" || shownTabs.includes(storedTab)) ? storedTab : "primary";
   const showTabs = hasTabs && !rawSearch.trim();
-  const query = listQuery(view, info, search, filter, hasTabs ? inboxTabQuery(tab, shownTabs) : "");
+  const viewListQuery = listQuery(view, info, search, filter, hasTabs ? inboxTabQuery(tab, shownTabs) : "");
+  const split = dir.settledLabelId !== null && viewListQuery !== null && splitsSettled(view, rawSearch);
+  const query = split ? `${viewListQuery} is:unsettled` : viewListQuery;
+  const settledSectionQuery = split ? `${viewListQuery} is:settled` : null;
   const threadsQuery = useThreads(query);
+  const [settledOpen, setSettledOpen] = useState(() => safeStorage.get(SETTLED_OPEN_KEY, false));
+  const toggleSettled = () => {
+    setSettledOpen((open) => {
+      safeStorage.set(SETTLED_OPEN_KEY, !open);
+      return !open;
+    });
+  };
+  const settledCount = useSearchFacets(settledSectionQuery ?? "").data;
+  const settledTotal = settledSectionQuery ? (settledCount?.total ?? 0) : 0;
+  const settledThreadsQuery = useThreads(settledSectionQuery && settledOpen ? settledSectionQuery : null);
+  const settledThreads = useMemo(
+    () => (settledSectionQuery && settledOpen ? (settledThreadsQuery.data?.pages.flatMap((p) => p.threads) ?? []) : []),
+    [settledSectionQuery, settledOpen, settledThreadsQuery.data],
+  );
+  const showSettled = split && (settledTotal > 0 || settledThreads.length > 0);
   const fetched = useMemo(() => threadsQuery.data?.pages.flatMap((p) => p.threads) ?? [], [threadsQuery.data]);
   const firstPage = threadsQuery.data?.pages[0];
   const total = firstPage?.total ?? 0;
@@ -153,27 +180,55 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
   }, [settledQuery]);
   const animateRows = entering !== null && performance.now() < entering.until;
 
-  // ── Virtual rows ──
+  // ── Virtual rows: the conversations, then the Settled section's own list below its header ──
   const scrollRef = useRef<HTMLDivElement>(null);
+  const settledListRef = useRef<HTMLDivElement>(null);
   const rowHeight = ROW_HEIGHT[density];
+  const settledId = dir.settledLabelId;
+  const caughtUp = showSettled && threads.length === 0 && !threadsQuery.hasNextPage;
   const virtualizer = useVirtualizer({
     count: threads.length + (threadsQuery.hasNextPage ? 1 : 0),
     getScrollElement: () => scrollRef.current,
     estimateSize: () => rowHeight,
     overscan: 12,
-    getItemKey: (index) => threads[index]?.id ?? `loader-${index}`,
+    getItemKey: (index) => threads[index]?.id ?? "loader-active",
+  });
+  // Where the settled rows start in the scroll area (they move as the list above grows).
+  const [settledTop, setSettledTop] = useState(0);
+  useLayoutEffect(() => {
+    const top = settledListRef.current?.offsetTop ?? 0;
+    if (top !== settledTop) setSettledTop(top);
+  });
+  const settledVirtualizer = useVirtualizer({
+    count: settledOpen ? settledThreads.length + (settledThreadsQuery.hasNextPage ? 1 : 0) : 0,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => rowHeight,
+    overscan: 12,
+    scrollMargin: settledTop,
+    getItemKey: (index) => settledThreads[index]?.id ?? "loader-settled",
   });
   useEffect(() => {
     virtualizer.measure();
-  }, [rowHeight, virtualizer]);
+    settledVirtualizer.measure();
+  }, [rowHeight, virtualizer, settledVirtualizer]);
 
   const items = virtualizer.getVirtualItems();
+  const settledItems = settledVirtualizer.getVirtualItems();
   const lastIndex = items[items.length - 1]?.index ?? 0;
+  const lastSettledIndex = settledItems[settledItems.length - 1]?.index ?? -1;
   useEffect(() => {
     if (lastIndex >= threads.length - 15 && threadsQuery.hasNextPage && !threadsQuery.isFetchingNextPage) {
       void threadsQuery.fetchNextPage();
     }
   }, [lastIndex, threads.length, threadsQuery]);
+  useEffect(() => {
+    if (lastSettledIndex >= settledThreads.length - 15 && settledThreadsQuery.hasNextPage && !settledThreadsQuery.isFetchingNextPage) {
+      void settledThreadsQuery.fetchNextPage();
+    }
+  }, [lastSettledIndex, settledThreads.length, settledThreadsQuery]);
+
+  // What the keyboard walks through: the conversations shown, in order.
+  const shownThreads = useMemo(() => (settledOpen ? [...threads, ...settledThreads] : threads), [threads, settledThreads, settledOpen]);
 
   // Back to the top when other rows arrive.
   useEffect(() => {
@@ -181,11 +236,14 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
   }, [settledQuery]);
 
   useEffect(() => {
-    listNav.threads = threads;
-  }, [threads]);
+    listNav.threads = shownThreads;
+  }, [shownThreads]);
   useEffect(() => {
-    listNav.scrollToIndex = (index) => virtualizer.scrollToIndex(index, { align: "auto" });
-  }, [virtualizer]);
+    listNav.scrollToIndex = (index) => {
+      if (index < threads.length) virtualizer.scrollToIndex(index, { align: "auto" });
+      else settledVirtualizer.scrollToIndex(index - threads.length, { align: "auto" });
+    };
+  }, [virtualizer, settledVirtualizer, threads.length]);
 
   // ── Clicks ──
   const selectionSet = useMemo(() => new Set(selection), [selection]);
@@ -195,11 +253,11 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
     (event: ReactMouseEvent, thread: ThreadSummary) => {
       const ui = useUi.getState();
       if (event.shiftKey && ui.selectionAnchor) {
-        const from = threads.findIndex((t) => t.id === ui.selectionAnchor);
-        const to = threads.findIndex((t) => t.id === thread.id);
+        const from = shownThreads.findIndex((t) => t.id === ui.selectionAnchor);
+        const to = shownThreads.findIndex((t) => t.id === thread.id);
         if (from !== -1 && to !== -1) {
           const [a, b] = from < to ? [from, to] : [to, from];
-          const range = threads.slice(a, b + 1).map((t) => t.id);
+          const range = shownThreads.slice(a, b + 1).map((t) => t.id);
           ui.setSelection([...new Set([...ui.selection, ...range])], ui.selectionAnchor);
           return;
         }
@@ -208,7 +266,7 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
       ui.setSelection(has ? ui.selection.filter((id) => id !== thread.id) : [...ui.selection, thread.id], thread.id);
       ui.setFocusedThread(thread.id);
     },
-    [threads],
+    [shownThreads],
   );
 
   const onRowClick = useCallback(
@@ -243,12 +301,12 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
   const menuTargets = menuThread ? (selectionSet.has(menuThread.id) ? selection : [menuThread.id]) : [];
 
   // ── Header ──
-  const allChecked = threads.length > 0 && threads.every((t) => selectionSet.has(t.id));
+  const allChecked = shownThreads.length > 0 && shownThreads.every((t) => selectionSet.has(t.id));
   const someChecked = selectionMode && !allChecked;
   const toggleAll = () => {
     const ui = useUi.getState();
     if (allChecked || someChecked) ui.clearSelection();
-    else ui.setSelection(threads.map((t) => t.id), threads[0]?.id ?? null);
+    else ui.setSelection(shownThreads.map((t) => t.id), shownThreads[0]?.id ?? null);
   };
 
   // Above the rows' checkboxes (same 0.5rem inset and 1.25rem cell as ThreadRow's).
@@ -259,7 +317,7 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
       aria-checked={allChecked ? true : someChecked ? "mixed" : false}
       aria-label={allChecked || someChecked ? "Uncheck all" : "Check all"}
       title={allChecked || someChecked ? "Uncheck all" : "Check all loaded"}
-      disabled={threads.length === 0}
+      disabled={shownThreads.length === 0}
       onClick={toggleAll}
       className="grid w-5 shrink-0 cursor-pointer place-items-center self-stretch rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-40"
     >
@@ -275,7 +333,26 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
 
   const hideLabelId = view.kind === "label" ? view.labelId : null;
   const isPending = threadsQuery.isPending && query !== null;
-  const showEmpty = !isPending && !threadsQuery.isError && threads.length === 0;
+  const showEmpty = !isPending && !threadsQuery.isError && threads.length === 0 && !showSettled;
+  const settleableHere = view.kind !== "trash" && view.kind !== "spam";
+  const renderRow = (thread: ThreadSummary, settled: boolean) => (
+    <ThreadRow
+      thread={thread}
+      dir={dir}
+      density={density}
+      open={thread.id === openThreadId}
+      focused={thread.id === focusedThreadId}
+      checked={selectionSet.has(thread.id)}
+      selectionMode={selectionMode}
+      showAccount={info.spansAccounts}
+      hideLabelId={hideLabelId}
+      settled={settled}
+      settleable={settleableHere && thread.messageCount > 0 && !thread.inTrash && !thread.inSpam}
+      onRowClick={onRowClick}
+      onToggleCheck={toggleCheck}
+      onContextMenu={onContextMenu}
+    />
+  );
   const searching = search.length > 0 || filter !== "all" || view.kind === "search";
   const setSearch = useUi((s) => s.setSearch);
   const thisViewKey = viewKey(view);
@@ -432,58 +509,97 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
             </Empty>
           )
         ) : (
-          <div
-            key={entering?.key ?? lastSettled.current ?? "rows"}
-            style={{ height: virtualizer.getTotalSize(), position: "relative" }}
-          >
-            {items.map((item) => {
-              const thread = threads[item.index];
-              const position = item.index - (items[0]?.index ?? 0);
-              return (
+          <div className="flex min-h-full flex-col">
+            <div
+              key={entering?.key ?? lastSettled.current ?? "rows"}
+              className="shrink-0"
+              style={{ height: virtualizer.getTotalSize(), position: "relative" }}
+            >
+              {items.map((item) => {
+                const thread = threads[item.index];
+                const position = item.index - (items[0]?.index ?? 0);
+                return (
+                  <div
+                    key={item.key}
+                    style={{ position: "absolute", top: 0, left: 0, width: "100%", height: rowHeight, transform: `translateY(${item.start}px)` }}
+                  >
+                    {thread ? (
+                      <div
+                        className={cn("h-full", animateRows && "animate-enter")}
+                        style={animateRows ? { animationDelay: `${Math.min(position, 14) * 14}ms` } : undefined}
+                      >
+                        {renderRow(thread, isSettled(thread, settledId))}
+                      </div>
+                    ) : (
+                      <RowSkeleton density={density} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {caughtUp ? (
+              <div className="flex min-h-40 flex-1 animate-fade-in flex-col items-center justify-center gap-3 text-muted-foreground">
+                <InboxIcon className="size-8 text-muted-foreground/60" strokeWidth={1.5} />
+                <span className="font-medium text-sm">All caught up</span>
+              </div>
+            ) : null}
+            {showSettled ? (
+              <>
+                {/* Stays at the foot of the pane until the list reaches it, then scrolls with it. */}
                 <div
-                  key={item.key}
-                  style={{ position: "absolute", top: 0, left: 0, width: "100%", height: rowHeight, transform: `translateY(${item.start}px)` }}
+                  data-section="settled"
+                  className="sticky bottom-0 z-10 mt-auto shrink-0 bg-background px-1.5 py-1 before:pointer-events-none before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-gradient-to-t before:from-background before:to-transparent"
                 >
-                  {thread ? (
-                    <div
-                      className={cn("h-full", animateRows && "animate-enter")}
-                      style={animateRows ? { animationDelay: `${Math.min(position, 14) * 14}ms` } : undefined}
-                    >
-                      <ThreadRow
-                        thread={thread}
-                        dir={dir}
-                        density={density}
-                        open={thread.id === openThreadId}
-                        focused={thread.id === focusedThreadId}
-                        checked={selectionSet.has(thread.id)}
-                        selectionMode={selectionMode}
-                        showAccount={info.spansAccounts}
-                        hideLabelId={hideLabelId}
-                        onRowClick={onRowClick}
-                        onToggleCheck={toggleCheck}
-                        onContextMenu={onContextMenu}
-                      />
-                    </div>
-                  ) : (
-                    <RowSkeleton density={density} />
-                  )}
+                  <CollapsibleSectionHeader
+                    expanded={settledOpen}
+                    onClick={toggleSettled}
+                    accessory={<span className="font-normal tabular-nums">{formatCount(settledTotal)}</span>}
+                  >
+                    Settled
+                  </CollapsibleSectionHeader>
                 </div>
-              );
-            })}
+                <div ref={settledListRef} className="shrink-0" style={{ height: settledVirtualizer.getTotalSize(), position: "relative" }}>
+                  {settledItems.map((item) => {
+                    const thread = settledThreads[item.index];
+                    return (
+                      <div
+                        key={item.key}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          height: rowHeight,
+                          transform: `translateY(${item.start - settledVirtualizer.options.scrollMargin}px)`,
+                        }}
+                      >
+                        {thread ? renderRow(thread, true) : <RowSkeleton density={density} />}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : null}
           </div>
         )}
       </div>
 
       <Menu open={rowMenu.open} onOpenChange={rowMenu.setOpen} modal={false}>
         <MenuPopup anchor={rowMenu.anchor ?? undefined} align="start" className="w-56">
-          {menuThread ? <RowMenuItems thread={menuThread} targets={menuTargets} /> : null}
+          {menuThread ? (
+            <RowMenuItems
+              thread={menuThread}
+              targets={menuTargets}
+              settled={isSettled(menuThread, settledId)}
+              settleable={settleableHere && menuThread.messageCount > 0 && !menuThread.inTrash && !menuThread.inSpam}
+            />
+          ) : null}
         </MenuPopup>
       </Menu>
     </section>
   );
 }
 
-/** No account yet (a fresh install): what to do first. */
 /** Gmail's inbox tabs. Each one says how many unread conversations it has. */
 function InboxTabs({
   tabs,
@@ -556,7 +672,17 @@ function Welcome() {
   );
 }
 
-function RowMenuItems({ thread, targets }: { thread: ThreadSummary; targets: string[] }) {
+function RowMenuItems({
+  thread,
+  targets,
+  settled,
+  settleable,
+}: {
+  thread: ThreadSummary;
+  targets: string[];
+  settled: boolean;
+  settleable: boolean;
+}) {
   const many = targets.length > 1;
   const unread = thread.unreadCount > 0;
   return (
@@ -565,6 +691,12 @@ function RowMenuItems({ thread, targets }: { thread: ThreadSummary; targets: str
         <MenuItem onClick={() => openConversation(thread.id)}>
           <MailOpenIcon />
           Open
+        </MenuItem>
+      ) : null}
+      {settleable ? (
+        <MenuItem onClick={() => void runThreadCommand(settled ? "unsettle" : "settle", targets)}>
+          {settled ? <Undo2Icon /> : <CircleCheckIcon />}
+          {settled ? "Un-settle" : many ? `Settle ${targets.length}` : "Settle"}
         </MenuItem>
       ) : null}
       {thread.inTrash ? (
@@ -624,6 +756,11 @@ function BulkBar({ view, selection }: { view: ViewRef; selection: string[] }) {
         <XIcon />
       </IconButton>
       <span className="me-auto min-w-0 truncate ps-1 font-medium text-sm tabular-nums">{plural(selection.length, "selected", "selected")}</span>
+      {view.kind !== "trash" && view.kind !== "spam" ? (
+        <IconButton label="Settle" shortcut="Ctrl+Shift+S" onClick={() => toggleSettle(selection)}>
+          <CircleCheckIcon />
+        </IconButton>
+      ) : null}
       <IconButton label={notInbox && view.kind === "archive" ? "Move to inbox" : "Archive"} shortcut="E" onClick={() => archiveOrInbox(selection)}>
         {notInbox && view.kind === "archive" ? <ArchiveRestoreIcon /> : <ArchiveIcon />}
       </IconButton>

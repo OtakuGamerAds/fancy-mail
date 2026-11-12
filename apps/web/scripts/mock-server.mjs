@@ -60,6 +60,8 @@ const labels = [
   { id: "l_travel", name: "Travel", color: "#f97316", sortOrder: 3 },
   { id: "l_spons", name: "Sponsorships", color: "#ec4899", sortOrder: 4 },
   { id: "l_tax", name: "Tax 2026", color: null, sortOrder: 5 },
+  // Fancy Mail's own: conversations you are done with.
+  { id: "l_settled", name: "Settled", color: null, sortOrder: 6 },
 ];
 
 const mailboxes = [
@@ -205,6 +207,14 @@ const drafts = [
   },
 ];
 threads.find((t) => t.id === "t_2").draftCount = 1;
+// Most older mail is settled; recent mail and a few open questions are not.
+for (const t of threads) {
+  const n = Number(t.id.slice(2));
+  if (n >= 6 && n % 4 !== 1) {
+    t.labelIds = [...t.labelIds, "l_settled"];
+    t.unreadCount = 0;
+  }
+}
 
 const activity = [
   { id: id("act"), at: now - 20 * 60_000, actor: { kind: "agent", name: "claude-code" }, summary: "Labeled 12 conversations Invoices", kind: "label", threadIds: ["t_0", "t_12", "t_24"], undoable: true, undoneAt: null },
@@ -291,6 +301,10 @@ function matches(t, allTerms) {
           : true;
         break;
       case "is":
+        if (term.value === "settled" || term.value === "unsettled") {
+          ok = t.labelIds.includes("l_settled") === (term.value === "settled");
+          break;
+        }
         ok = term.value === "unread" ? t.unreadCount > 0 : term.value === "read" ? t.unreadCount === 0 : term.value === "starred" ? t.starred : term.value === "unstarred" ? !t.starred : t.draftCount > 0;
         break;
       case "has":
@@ -359,6 +373,8 @@ function applyAction(t, action) {
     case "notSpam": t.inSpam = false; t.inInbox = true; break;
     case "addLabels": t.labelIds = [...new Set([...t.labelIds, ...action.labelIds])]; break;
     case "removeLabels": t.labelIds = t.labelIds.filter((l) => !action.labelIds.includes(l)); break;
+    case "settle": t.labelIds = [...new Set([...t.labelIds, "l_settled"])]; msgs.forEach((m) => (m.unread = false)); t.unreadCount = 0; break;
+    case "unsettle": t.labelIds = t.labelIds.filter((l) => l !== "l_settled"); break;
   }
 }
 
@@ -366,6 +382,7 @@ const SUMMARY = {
   markRead: "Marked {n} read", markUnread: "Marked {n} unread", star: "Starred {n}", unstar: "Unstarred {n}",
   archive: "Archived {n}", moveToInbox: "Moved {n} to the inbox", trash: "Moved {n} to the trash", restore: "Restored {n}",
   markSpam: "Marked {n} as spam", notSpam: "Marked {n} as not spam", addLabels: "Labeled {n} {label}", removeLabels: "Removed {label} from {n}",
+  settle: "Settled {n}", unsettle: "Un-settled {n}",
 };
 
 const snapshots = new Map();

@@ -9,7 +9,7 @@ import type { ViewKind } from "@fancy-mail/contracts";
 import { toast } from "~/components/ui/toast";
 import { isEditableTarget } from "~/lib/utils";
 import { undoLatest } from "~/state/actions";
-import { archiveOrInbox, runThreadCommand, targetThreadIds, toggleStar } from "~/state/commands";
+import { archiveOrInbox, runThreadCommand, targetThreadIds, toggleSettle, toggleStar } from "~/state/commands";
 import { indexOfThread, listNav } from "~/state/listNav";
 import { openConversation } from "~/state/openConversation";
 import { navigate, navigateBackTo } from "~/state/router";
@@ -38,6 +38,7 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: ["G", "D"], label: "Go to Drafts", group: "Navigation" },
   { keys: ["G", "T"], label: "Go to Trash", group: "Navigation" },
   { keys: ["G", "A"], label: "Go to All mail", group: "Navigation" },
+  { keys: ["Ctrl", "Shift", "S"], label: "Settle or un-settle", group: "Conversations" },
   { keys: ["E"], label: "Archive", group: "Conversations" },
   { keys: ["Shift", "E"], label: "Move to inbox", group: "Conversations" },
   { keys: ["#"], label: "Trash (also Delete)", group: "Conversations" },
@@ -116,6 +117,11 @@ export function useKeyboard() {
         if (key.toLowerCase() === "a" && inMail) {
           event.preventDefault();
           ui.setSelection(listNav.threads.map((t) => t.id), listNav.threads[0]?.id ?? null);
+        }
+        // Settle (or un-settle), as T3 Code's Mod+Shift+S.
+        if (event.shiftKey && key.toLowerCase() === "s" && inMail) {
+          event.preventDefault();
+          toggleSettle(targetThreadIds());
         }
         return;
       }

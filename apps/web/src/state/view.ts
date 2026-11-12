@@ -115,6 +115,15 @@ export function inboxTabQuery(tab: InboxTabId, shown: readonly InboxTab[]): stri
   return `category:${tab}`;
 }
 
+/**
+ * Settled conversations fold into the Settled section at the bottom of this list. Not while
+ * searching (what was asked for shows in place), nor in the trash, spam or drafts.
+ */
+export function splitsSettled(view: ViewRef, search: string): boolean {
+  if (search.trim()) return false;
+  return view.kind !== "search" && view.kind !== "trash" && view.kind !== "spam" && view.kind !== "drafts";
+}
+
 /** Searching from this view looks through all mail in its scope. */
 export function searchWidens(view: ViewRef): boolean {
   return view.kind === "inbox";

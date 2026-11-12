@@ -16,6 +16,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 
+import { findSettledLabel } from "@fancy-mail/contracts";
 import type { AccountStatus, AccountSyncState, CategoryValue, MailboxRole, Settings } from "@fancy-mail/contracts";
 import type { FetchMessageObject, FetchQueryObject, ImapFlow, MailboxObject } from "imapflow";
 
@@ -969,6 +970,7 @@ export class AccountWorker {
     this.#flush(ctx);
     await this.#syncCategories(client);
     if (ctx.newMessages.length > 0) this.#log.info("new mail", { messages: ctx.newMessages.length, newInInbox: ctx.newInbox.size });
+    if (!initial && ctx.newMessages.length > 0) this.#unsettleOnNewMail(ctx.newMessages);
     if (ctx.newInbox.size > 0) {
       // As in Gmail, only mail that lands in Primary notifies; Promotions and the others wait.
       const tabs = new Set<string>(this.#deps.settings().inboxTabs);
@@ -981,6 +983,36 @@ export class AccountWorker {
     }
     if (ctx.newMessages.length > 0) this.#queuePrefetch(ctx.newMessages);
     this.#saveSyncInfo({ lastPassAt: Date.now() });
+  }
+
+  /**
+   * A settled conversation that gets a new message (a reply, or one you sent) isn't settled any
+   * more. Older mail coming down (backfill, a server search) is left alone: it isn't the newest.
+   */
+  #unsettleOnNewMail(messageIds: string[]): void {
+    const { store } = this.#deps;
+    const settled = findSettledLabel(store.labels.list());
+    if (!settled) return;
+    const fresh = store.messages.byIds(messageIds).filter((m) => !m.isDraft);
+    const threadIds = [...new Set(fresh.map((m) => m.threadId))];
+    if (threadIds.length === 0) return;
+    const labeled = store.threads.labelIds(threadIds);
+    const candidates = threadIds.filter((id) => labeled.get(id)?.includes(settled.id));
+    if (candidates.length === 0) return;
+    const newIds = new Set(messageIds);
+    const reopen = candidates.filter((threadId) => {
+      const messages = store.messages.forThread(threadId).filter((m) => !m.isDraft);
+      const newest = Math.max(...messages.filter((m) => newIds.has(m.id)).map((m) => m.date));
+      const before = messages.filter((m) => !newIds.has(m.id)).map((m) => m.date);
+      return before.length === 0 || newest >= Math.max(...before);
+    });
+    if (reopen.length === 0) return;
+    try {
+      this.#deps.services.threads.unsettle(reopen);
+      this.#log.info("new mail un-settled conversations", { count: reopen.length });
+    } catch (error) {
+      this.#log.warn("couldn't un-settle conversations with new mail", { error: (error as Error).message });
+    }
   }
 
   async #syncMailbox(client: ImapFlow, mailbox: MailboxRecord, ctx: PassContext): Promise<void> {
