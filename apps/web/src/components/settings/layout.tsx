@@ -82,8 +82,8 @@ export function SettingsRow({
   );
 }
 
-/** A command or snippet with a copy button. */
-export function CodeBlock({ code, label, action }: { code: string; label?: string; action?: ReactNode }) {
+/** A command or snippet with a copy button; `wrap` for a sentence rather than code. */
+export function CodeBlock({ code, label, action, wrap }: { code: string; label?: string; action?: ReactNode; wrap?: boolean }) {
   return (
     <div className="overflow-hidden rounded-lg border border-border/60 bg-black/40">
       {label || action ? (
@@ -92,7 +92,10 @@ export function CodeBlock({ code, label, action }: { code: string; label?: strin
           {action}
         </div>
       ) : null}
-      <pre className="overflow-x-auto px-3 py-2.5 font-mono text-[12px] text-foreground/90 leading-relaxed" data-selectable>
+      <pre
+        className={cn("px-3 py-2.5 font-mono text-[12px] text-foreground/90 leading-relaxed", wrap ? "whitespace-pre-wrap break-words" : "overflow-x-auto")}
+        data-selectable
+      >
         {code}
       </pre>
     </div>

@@ -1,9 +1,11 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import path from "node:path";
 
 import { Settings } from "@fancy-mail/contracts";
 import type { McpClient, McpInfo } from "@fancy-mail/contracts";
 
 import { AppError } from "../errors.ts";
+import { displayPath, GUIDE_FILE } from "../mcp/guide.ts";
 import { requireUser } from "./context.ts";
 import type { CallContext } from "./context.ts";
 import { invalidate } from "./env.ts";
@@ -38,6 +40,7 @@ export function createSettingsService(env: ServiceEnv) {
 
 export function createMcpService(env: ServiceEnv) {
   let clients: McpClient[] = [];
+  const guidePath = displayPath(path.join(env.paths.agent, GUIDE_FILE));
 
   function token(): string {
     let value = env.store.kv.get(MCP_TOKEN_KEY);
@@ -52,7 +55,7 @@ export function createMcpService(env: ServiceEnv) {
     info(): McpInfo {
       const settings = env.store.settings.get();
       const port = env.port() || settings.mcp.port;
-      return { enabled: settings.mcp.enabled, url: `http://127.0.0.1:${port}/mcp`, token: token(), clients };
+      return { enabled: settings.mcp.enabled, url: `http://127.0.0.1:${port}/mcp`, token: token(), guidePath, clients };
     },
 
     rotateToken(ctx: CallContext): McpInfo {

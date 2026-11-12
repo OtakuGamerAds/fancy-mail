@@ -33,6 +33,8 @@ export function dataPaths(dataDir: string) {
     uploads: path.join(dataDir, "uploads"),
     logs: path.join(dataDir, "logs"),
     vaultKey: path.join(dataDir, "vault.key"),
+    /** What agents read to connect (mcp/guide.ts). */
+    agent: path.join(dataDir, "agent"),
   };
 }
 

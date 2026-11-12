@@ -256,7 +256,7 @@ function bootstrap() {
     })),
     mailboxes,
     settings,
-    mcp: { enabled: settings.mcp.enabled, url: `http://127.0.0.1:${settings.mcp.port}/mcp`, token: mcpToken, clients: settings.mcp.enabled ? mcpClients : [] },
+    mcp: { enabled: settings.mcp.enabled, url: `http://127.0.0.1:${settings.mcp.port}/mcp`, token: mcpToken, guidePath: "~/AppData/Roaming/Fancy Mail/agent/README.md", clients: settings.mcp.enabled ? mcpClients : [] },
     hasDemoData,
   };
 }

@@ -1,10 +1,11 @@
 /**
  * Settings › Agents. Fancy Mail has no AI inside; agents the person already uses connect over
- * MCP. Here: the switch, the address and token, ready-to-copy setups, how much each account
- * lets agents do, and who is connected.
+ * MCP. Here: the switch, one line to copy into an agent (it points to the agent folder, where
+ * the agent reads how to connect: see server mcp/guide.ts), the address and token under
+ * Advanced, how much each account lets agents do, and who is connected.
  */
 import { AGENT_ACCESS_INFO, type AgentAccess } from "@fancy-mail/contracts";
-import { CheckIcon, CopyIcon, EyeIcon, EyeOffIcon, HistoryIcon, RotateCwIcon } from "lucide-react";
+import { CheckIcon, ChevronRightIcon, CopyIcon, EyeIcon, EyeOffIcon, HistoryIcon, RotateCwIcon } from "lucide-react";
 import { useState } from "react";
 
 import { AccountAvatar, ColorDot, IconButton } from "~/components/common";
@@ -19,6 +20,7 @@ import {
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog";
 import { Button, InlineButton } from "~/components/ui/button";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { Switch } from "~/components/ui/switch";
 import { toast } from "~/components/ui/toast";
@@ -59,6 +61,33 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
+/** The line people paste into their agent: where to read, nothing secret or personal. */
+export function agentPrompt(guidePath: string): string {
+  return `Fancy Mail is my email app. Read "${guidePath}" and follow it to connect to my mail.`;
+}
+
+function CopyLabelButton({ text, children }: { text: string; children: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <Button
+      size="xs"
+      variant="ghost-muted"
+      onClick={() => {
+        navigator.clipboard.writeText(text).then(
+          () => {
+            setDone(true);
+            setTimeout(() => setDone(false), 1500);
+          },
+          () => toast.error("Couldn't copy to the clipboard"),
+        );
+      }}
+    >
+      {done ? <CheckIcon className="text-success-foreground" /> : <CopyIcon />}
+      {done ? "Copied" : children}
+    </Button>
+  );
+}
+
 export function AgentsSettings() {
   const { data: bootstrap } = useBootstrap();
   const dir = useDirectory();
@@ -77,6 +106,7 @@ export function AgentsSettings() {
   );
   const shownCommand = reveal ? claudeCommand : claudeCommand.replace(mcp.token, masked);
   const shownJson = reveal ? mcpJson : mcpJson.replace(mcp.token, masked);
+  const prompt = agentPrompt(mcp.guidePath);
 
   const rotate = async () => {
     setRotating(true);
@@ -123,43 +153,61 @@ export function AgentsSettings() {
             />
           }
         />
-        <SettingsRow
-          title="Address"
-          control={
-            <span className="flex min-w-0 items-center gap-1">
-              <code className="truncate rounded-md bg-white/[0.05] px-2 py-1 font-mono text-xs" data-selectable>
-                {mcp.url}
-              </code>
-              <CopyButton text={mcp.url} label="Copy address" />
-            </span>
-          }
-        />
-        <SettingsRow
-          title="Token"
-          description="Agents send it with every request. Anyone with it can act as an agent, within each account's access."
-          control={
-            <span className="flex min-w-0 items-center gap-1">
-              <code className="max-w-56 truncate rounded-md bg-white/[0.05] px-2 py-1 font-mono text-xs" data-selectable>
-                {reveal ? mcp.token : masked}
-              </code>
-              <IconButton label={reveal ? "Hide token" : "Show token"} size="icon-xs" onClick={() => setReveal((r) => !r)}>
-                {reveal ? <EyeOffIcon /> : <EyeIcon />}
-              </IconButton>
-              <CopyButton text={mcp.token} label="Copy token" />
-              <Button size="xs" variant="outline" onClick={() => setConfirmRotate(true)}>
-                <RotateCwIcon />
-                Rotate
-              </Button>
-            </span>
-          }
-        />
       </SettingsSection>
 
-      <SettingsSection title="Set up an agent" description="Copy one of these into your agent. They include the token, so keep them to yourself.">
-        <div className="space-y-3 px-3 py-3 sm:px-4">
-          <CodeBlock code={shownCommand} label="Claude Code (terminal)" action={<CopyButton text={claudeCommand} label="Copy command" />} />
-          <CodeBlock code={shownJson} label=".mcp.json (Claude Code, T3 Code, other MCP clients)" action={<CopyButton text={mcpJson} label="Copy .mcp.json" />} />
+      <SettingsSection
+        title="Set up an agent"
+        description="Paste this into Claude Code, Codex, T3 Code or any other agent. It tells the agent where Fancy Mail keeps the setup, so the token isn't in it."
+      >
+        <div className="space-y-2 px-3 py-3 sm:px-4">
+          <CodeBlock code={prompt} wrap label="For your agent" action={<CopyLabelButton text={prompt}>Copy</CopyLabelButton>} />
+          {settings.mcp.enabled ? null : <p className="text-muted-foreground text-xs">Turn on Allow agents first. The setup is only there while agents are allowed.</p>}
         </div>
+        <Collapsible>
+          <CollapsibleTrigger className="group flex h-11 w-full items-center gap-2 px-3 text-start text-muted-foreground text-sm transition-colors hover:text-foreground sm:px-4">
+            <ChevronRightIcon className="size-4 shrink-0 transition-transform duration-150 group-data-[panel-open]:rotate-90" />
+            <span className="font-medium">Advanced</span>
+            <span className="truncate text-muted-foreground/70 text-xs">Address, token and configs, to set up by hand</span>
+          </CollapsibleTrigger>
+          <CollapsiblePanel>
+            <div className="border-border/50 border-t [&>*+*]:border-border/50 [&>*+*]:border-t [&>[data-slot=settings-row]]:rounded-none">
+              <SettingsRow
+                title="Address"
+                control={
+                  <span className="flex min-w-0 items-center gap-1">
+                    <code className="truncate rounded-md bg-white/[0.05] px-2 py-1 font-mono text-xs" data-selectable>
+                      {mcp.url}
+                    </code>
+                    <CopyButton text={mcp.url} label="Copy address" />
+                  </span>
+                }
+              />
+              <SettingsRow
+                title="Token"
+                description="Agents send it with every request. Anyone with it can act as an agent, within each account's access."
+                control={
+                  <span className="flex min-w-0 items-center gap-1">
+                    <code className="max-w-56 truncate rounded-md bg-white/[0.05] px-2 py-1 font-mono text-xs" data-selectable>
+                      {reveal ? mcp.token : masked}
+                    </code>
+                    <IconButton label={reveal ? "Hide token" : "Show token"} size="icon-xs" onClick={() => setReveal((r) => !r)}>
+                      {reveal ? <EyeOffIcon /> : <EyeIcon />}
+                    </IconButton>
+                    <CopyButton text={mcp.token} label="Copy token" />
+                    <Button size="xs" variant="outline" onClick={() => setConfirmRotate(true)}>
+                      <RotateCwIcon />
+                      Rotate
+                    </Button>
+                  </span>
+                }
+              />
+              <div className="space-y-3 px-3 py-3 sm:px-4">
+                <CodeBlock code={shownCommand} label="Claude Code (terminal)" action={<CopyButton text={claudeCommand} label="Copy command" />} />
+                <CodeBlock code={shownJson} label=".mcp.json (Claude Code, T3 Code, other MCP clients)" action={<CopyButton text={mcpJson} label="Copy .mcp.json" />} />
+              </div>
+            </div>
+          </CollapsiblePanel>
+        </Collapsible>
       </SettingsSection>
 
       <SettingsSection title="What agents may do">

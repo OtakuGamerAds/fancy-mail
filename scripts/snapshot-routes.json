@@ -27,6 +27,7 @@
     { "name": "shortcuts", "hash": "#/inbox?dialog=shortcuts" },
     { "name": "settings-accounts", "hash": "#/settings/accounts" },
     { "name": "settings-agents", "hash": "#/settings/agents" },
+    { "name": "settings-agents-advanced", "hash": "#/settings/agents", "click": "[data-slot=collapsible-trigger]" },
     { "name": "activity", "hash": "#/activity" }
   ]
 }

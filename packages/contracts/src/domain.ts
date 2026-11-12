@@ -373,6 +373,8 @@ export const McpInfo = z.object({
   /** http://127.0.0.1:<port>/mcp */
   url: z.string(),
   token: z.string(),
+  /** The agent folder's README, with the home folder as `~`: agents read it to connect. */
+  guidePath: z.string(),
   clients: z.array(McpClient),
 });
 export type McpInfo = z.infer<typeof McpInfo>;

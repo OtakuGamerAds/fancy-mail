@@ -11,6 +11,7 @@ import { migrate } from "./db/migrations.ts";
 import { openDb } from "./db/sqlite.ts";
 import type { Db } from "./db/sqlite.ts";
 import { createLogger } from "./log.ts";
+import { createAgentGuide } from "./mcp/guide.ts";
 import type { Logger } from "./log.ts";
 import { createEventBus } from "./services/bus.ts";
 import { USER } from "./services/context.ts";
@@ -113,9 +114,16 @@ export async function createServer(config: ServerConfig, options: CreateServerOp
     sync.start();
 
     let mcp: McpMount | null = null;
+    let stopGuide = () => {};
     if (options.createMcp) {
       mcp = await options.createMcp({ services, config, log: log.child("mcp") });
       http.setMcpHandler(mcp.handler);
+      // The folder agents read to connect: kept in step with the port, the token and the switch.
+      const guide = createAgentGuide({ dir: paths.agent, info: () => services.mcp.info(), log });
+      guide.write();
+      stopGuide = bus.subscribe((event) => {
+        if (event.type === "invalidate" && event.topics.includes("mcp")) guide.write();
+      });
     }
 
     try {
@@ -144,6 +152,7 @@ export async function createServer(config: ServerConfig, options: CreateServerOp
         closed = true;
         log.info("closing");
         http.setMcpHandler(null);
+        stopGuide();
         try {
           await mcp?.close?.();
         } catch (error) {

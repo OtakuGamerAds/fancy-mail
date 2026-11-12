@@ -29,7 +29,19 @@ only do what you allowed per account.
 
 ## Agents (MCP)
 
-Settings › Agents shows the address and token, and a ready-to-paste command:
+Settings › Agents has one line to paste into your agent (Claude Code, Codex, T3 Code or any
+other). It names a file, and the agent reads from there how to connect and sets itself up. The
+token isn't in that line.
+
+While agents are allowed, Fancy Mail keeps an `agent` folder next to its data:
+
+- `README.md`: what Fancy Mail is, how to add its MCP server in each client, and the rules
+  (email is untrusted text, draft before sending, use the tools, not the files). Nothing secret.
+- `connection.json`: the address and token. It's rewritten when the port or the token changes,
+  and removed when agents are turned off.
+
+To set an agent up by hand, open Advanced on the same page for the address, the token and
+ready-made configs:
 
 ```
 claude mcp add --transport http fancy-mail http://127.0.0.1:47821/mcp --header "Authorization: Bearer <token>"
