@@ -79,7 +79,11 @@ export function useSwipeAction(run: (() => void) | null) {
       }
       if (dx > -START_PX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
       g.swiping = true;
-      event.currentTarget.setPointerCapture(event.pointerId);
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // Not a live pointer any more: the swipe goes on without capture.
+      }
     }
     move(dx + START_PX, g.width);
   };

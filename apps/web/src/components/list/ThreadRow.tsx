@@ -28,7 +28,7 @@ import { memo, useState, type MouseEvent as ReactMouseEvent } from "react";
 
 import { AccountAvatar, LabelChip } from "~/components/common";
 import { TIMED_COPY, TimeMenuItems, type TimedKind } from "~/components/StateMenus";
-import { Menu, MenuGroupLabel, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+import { Menu, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { CheckboxMark } from "~/components/ui/checkbox";
 import { displayName } from "~/lib/addresses";
 import { formatExact, formatListDate } from "~/lib/format";
@@ -124,8 +124,7 @@ function TimedAction({ kind, threadId, onOpenChange }: { kind: TimedKind; thread
         <Icon />
       </MenuTrigger>
       <MenuPopup align="end" className="w-60" onClick={(event) => event.stopPropagation()}>
-        <MenuGroupLabel>{TIMED_COPY[kind].menuTitle}</MenuGroupLabel>
-        <TimeMenuItems kind={kind} onPick={(until) => void runTimedCommand(kind, [threadId], until)} />
+        <TimeMenuItems kind={kind} title={TIMED_COPY[kind].menuTitle} onPick={(until) => void runTimedCommand(kind, [threadId], until)} />
       </MenuPopup>
     </Menu>
   );
@@ -343,6 +342,7 @@ export const ThreadRow = memo(function ThreadRow({
       data-thread-id={thread.id}
       data-focused={focused || undefined}
       data-state={state}
+      data-actionable={actionable || undefined}
       className={cn(
         "group/thread relative flex w-full cursor-pointer select-none items-center gap-2 border-border/50 border-b ps-2 pe-3 text-sm",
         compact ? "h-10" : "h-[68px]",

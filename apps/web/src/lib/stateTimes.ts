@@ -56,18 +56,27 @@ export function waitChoices(now = Date.now()): TimeChoice[] {
     { id: "2w", label: "2 weeks", until: atHour(daysFrom(now, 14), 9) },
     { id: "1m", label: "1 month", until: atHour(month, 9) },
   ];
-  return choices.map((c) => ({ ...c, detail: formatWhen(c.until, now) }));
+  return choices.map((c) => ({ ...c, detail: formatDay(c.until) }));
+}
+
+/** "Thu, Nov 19", with the time unless it's 09:00: "Fri, Nov 13, 18:00". */
+function formatDay(ms: number): string {
+  const d = new Date(ms);
+  const day = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  if (d.getHours() === 9 && d.getMinutes() === 0) return day;
+  return `${day}, ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 /** Snoozing: this evening (while it's still ahead), tomorrow morning, the weekend, next week. */
 export function snoozeChoices(now = Date.now()): TimeChoice[] {
   const today = new Date(now);
   const out: Omit<TimeChoice, "detail">[] = [];
+  // Later today: this evening while it's ahead, a few hours on in the evening, nothing at night.
   if (today.getHours() < 16) out.push({ id: "evening", label: "This evening", until: atHour(today, 18) });
-  else out.push({ id: "later", label: "In 3 hours", until: now + 3 * 3_600_000 });
+  else if (today.getHours() < 20) out.push({ id: "later", label: "In 3 hours", until: now + 3 * 3_600_000 });
   out.push({ id: "tomorrow", label: "Tomorrow", until: atHour(daysFrom(now, 1), 9) });
   const weekday = today.getDay(); // 0 Sunday … 6 Saturday
   if (weekday >= 1 && weekday <= 4) out.push({ id: "weekend", label: "This weekend", until: atHour(daysFrom(now, 6 - weekday), 9) });
   out.push({ id: "week", label: "Next week", until: atHour(daysFrom(now, ((8 - weekday) % 7) || 7), 9) });
-  return out.map((c) => ({ ...c, detail: formatWhen(c.until, now) }));
+  return out.map((c) => ({ ...c, detail: formatDay(c.until) }));
 }

@@ -15,6 +15,9 @@
     { "name": "settled-group", "hash": "#/g/{group:Banking}/inbox" },
     { "name": "waiting-open", "hash": "#/inbox", "click": "[data-section=waiting] button" },
     { "name": "states-search", "hash": "#/inbox?search=is%3Awaiting" },
+    { "name": "row-snooze-menu", "hash": "#/inbox", "click": "[data-thread-id] button[aria-label='Snooze']" },
+    { "name": "row-wait-menu", "hash": "#/inbox", "click": "[data-thread-id] button[aria-label='Wait for an answer']" },
+    { "name": "reader-snooze-menu", "hash": "#/all/t/{agentDraftThread}", "click": "button[aria-label='Snooze']:not([data-thread-id] *)" },
     { "name": "inbox-promotions", "hash": "#/inbox", "click": "[aria-label='Inbox tabs'] [role=tab]:nth-child(2)" },
     { "name": "group-banking", "hash": "#/g/{group:Banking}/inbox" },
     { "name": "account-inbox", "hash": "#/a/{account:billing@brightwave.example}/inbox" },
@@ -35,6 +38,19 @@
     { "name": "settings-accounts", "hash": "#/settings/accounts" },
     { "name": "settings-agents", "hash": "#/settings/agents" },
     { "name": "settings-agents-advanced", "hash": "#/settings/agents", "click": "[data-slot=collapsible-trigger]" },
-    { "name": "activity", "hash": "#/activity" }
+    { "name": "activity", "hash": "#/activity" },
+    {"name": "flow-1-snooze", "hash": "#/inbox", "click": ["[data-thread-id] button[aria-label='Snooze']", "text:tomorrow"]},
+    {"name": "flow-2-wait", "hash": "#/inbox", "click": ["[data-thread-id] button[aria-label='Wait for an answer']", "text:1 week"]},
+    {"name": "flow-3-pick-time", "hash": "#/inbox", "click": ["[data-thread-id] button[aria-label='Snooze']", "text:pick a time"]},
+    {"name": "flow-4-pick-time-done", "hash": "#/inbox", "click": ["[data-thread-id] button[aria-label='Snooze']", "text:pick a time", "[data-slot=dialog-popup] button[type=submit]"]},
+    {"name": "flow-5-context", "hash": "#/inbox", "click": ["right:[data-actionable]"]},
+    {"name": "flow-6-context-wait", "hash": "#/inbox", "click": ["right:[data-actionable]", "text:wait for an answer"]},
+    {"name": "flow-7-context-wait-done", "hash": "#/inbox", "click": ["right:[data-actionable]", "text:wait for an answer", "text:2 weeks"]},
+    {"name": "flow-8-swipe", "hash": "#/inbox", "click": ["swipe:[data-actionable]"]},
+    {"name": "flow-9-shelves-open", "hash": "#/inbox", "click": ["[data-section=waiting] button", "[data-section=snoozed] button"]},
+    {"name": "flow-10-reader-wait", "hash": "#/all/t/{agentDraftThread}", "click": ["button[aria-label='Wait for an answer']:not([data-thread-id] *)", "text:3 days"]},
+    {"name": "flow-11-reply-send-wait-menu", "hash": "#/all/t/{thread:in:inbox -is:settled -is:waiting -is:snoozed}", "click": ["text:reply", "button[aria-label='Send and wait for an answer']"]},
+    {"name": "flow-12-reply-send-wait", "hash": "#/all/t/{thread:in:inbox -is:settled -is:waiting -is:snoozed}", "click": ["text:reply", "button[aria-label='Send and wait for an answer']", "text:1 week"]},
+    {"name": "flow-13-after", "hash": "#/inbox?search=is%3Awaiting"}
   ]
 }

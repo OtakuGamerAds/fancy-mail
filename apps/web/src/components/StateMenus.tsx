@@ -10,7 +10,7 @@ import { create } from "zustand";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
-import { Menu, MenuGroupLabel, MenuItem, MenuItemDetail, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
+import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuItemDetail, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { cn } from "~/lib/utils";
 import { formatWhen, snoozeChoices, waitChoices } from "~/lib/stateTimes";
 
@@ -31,11 +31,16 @@ export const TIMED_COPY: Record<TimedKind, { menuTitle: string; dialogTitle: str
   },
 };
 
-/** The usual times, then "Pick a time…". */
-export function TimeMenuItems({ kind, onPick }: { kind: TimedKind; onPick(until: number): void }) {
+/** The usual times, then "Pick a time…", under a title when there is one (a label needs its group). */
+export function TimeMenuItems({ kind, onPick, title }: { kind: TimedKind; onPick(until: number): void; title?: string }) {
   const choices = kind === "wait" ? waitChoices() : snoozeChoices();
   return (
     <>
+      {title ? (
+        <MenuGroup>
+          <MenuGroupLabel>{title}</MenuGroupLabel>
+        </MenuGroup>
+      ) : null}
       {choices.map((choice) => (
         <MenuItem key={choice.id} onClick={() => onPick(choice.until)}>
           {choice.label}
@@ -70,8 +75,7 @@ export function SendAndWaitButton({ disabled, onSend, round }: { disabled: boole
         <HourglassIcon />
       </MenuTrigger>
       <MenuPopup side="top" align="end" className="w-64">
-        <MenuGroupLabel>Send, and wait for an answer</MenuGroupLabel>
-        <TimeMenuItems kind="wait" onPick={onSend} />
+        <TimeMenuItems kind="wait" title="Send, and wait for an answer" onPick={onSend} />
       </MenuPopup>
     </Menu>
   );
@@ -126,6 +130,7 @@ function CustomTimeDialog({ kind, resolve }: { kind: TimedKind; resolve(until: n
     <Dialog open onOpenChange={(open) => !open && finish(null)}>
       <DialogPopup className="max-w-sm">
         <form
+          className="contents"
           onSubmit={(event) => {
             event.preventDefault();
             if (valid) finish(until);

@@ -235,7 +235,7 @@ async function main() {
   }
   const skipped = routes.length - resolved.length;
   if (resolveOnly) {
-    for (const route of resolved) console.log(`  ${route.name.padEnd(18)} ${route.hash}${route.click ? `  (click ${route.click})` : ""}`);
+    for (const route of resolved) console.log(`  ${route.name.padEnd(18)} ${route.hash}${route.click ? `  (then ${[route.click].flat().join(" › ")})` : ""}`);
     return stop(skipped ? 1 : 0, `${resolved.length} route(s) resolved, ${skipped} skipped`);
   }
 

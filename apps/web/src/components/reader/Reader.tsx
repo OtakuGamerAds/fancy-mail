@@ -32,7 +32,7 @@ import { ReplyArea } from "~/components/compose/ReplyComposer";
 import { LabelPickerPopover } from "~/components/LabelPicker";
 import { Button } from "~/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "~/components/ui/empty";
-import { Menu, MenuGroupLabel, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "~/components/ui/menu";
+import { Menu, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "~/components/ui/menu";
 import { Skeleton } from "~/components/ui/skeleton";
 import { toast } from "~/components/ui/toast";
 import { textDirection } from "~/lib/textDirection";
@@ -273,8 +273,7 @@ function Toolbar({ detail, onClose }: { detail: ThreadDetail; onClose(): void })
           {kind === "wait" ? <HourglassIcon /> : <AlarmClockIcon />}
         </MenuTrigger>
         <MenuPopup align="start" className="w-60">
-          <MenuGroupLabel>{TIMED_COPY[kind].menuTitle}</MenuGroupLabel>
-          <TimeMenuItems kind={kind} onPick={(until) => void runTimedCommand(kind, ids, until)} />
+          <TimeMenuItems kind={kind} title={TIMED_COPY[kind].menuTitle} onPick={(until) => void runTimedCommand(kind, ids, until)} />
         </MenuPopup>
       </Menu>
     );
