@@ -7,6 +7,7 @@ import { createLabelsStore } from "./labels.ts";
 import { createMailboxesStore } from "./mailboxes.ts";
 import { createMessagesStore } from "./messages.ts";
 import { createKvStore, createSettingsStore } from "./settings.ts";
+import { createThreadStatesStore } from "./threadStates.ts";
 import { createThreadsStore, refreshThreads } from "./threads.ts";
 
 /** Every table's SQL, in one object. No business rules live here. */
@@ -19,6 +20,7 @@ export function createStore(db: Db) {
     mailboxes: createMailboxesStore(db),
     messages: createMessagesStore(db),
     threads: createThreadsStore(db),
+    threadStates: createThreadStatesStore(db),
     drafts: createDraftsStore(db),
     uploads: createUploadsStore(db),
     activity: createActivityStore(db),

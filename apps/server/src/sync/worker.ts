@@ -16,7 +16,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 
-import { findSettledLabel } from "@fancy-mail/contracts";
+import { findStateLabel } from "@fancy-mail/contracts";
 import type { AccountStatus, AccountSyncState, CategoryValue, MailboxRole, Settings } from "@fancy-mail/contracts";
 import type { FetchMessageObject, FetchQueryObject, ImapFlow, MailboxObject } from "imapflow";
 
@@ -986,18 +986,24 @@ export class AccountWorker {
   }
 
   /**
-   * A settled conversation that gets a new message (a reply, or one you sent) isn't settled any
-   * more. Older mail coming down (backfill, a server search) is left alone: it isn't the newest.
+   * A settled, waiting or snoozed conversation that gets a new message (a reply, or one you
+   * sent) is active again. Older mail coming down (backfill, a server search) is left alone: it
+   * isn't the newest.
    */
   #unsettleOnNewMail(messageIds: string[]): void {
     const { store } = this.#deps;
-    const settled = findSettledLabel(store.labels.list());
-    if (!settled) return;
+    const states = new Set(
+      (["settled", "waiting", "snoozed"] as const).flatMap((key) => {
+        const label = findStateLabel(store.labels.list(), key);
+        return label ? [label.id] : [];
+      }),
+    );
+    if (states.size === 0) return;
     const fresh = store.messages.byIds(messageIds).filter((m) => !m.isDraft);
     const threadIds = [...new Set(fresh.map((m) => m.threadId))];
     if (threadIds.length === 0) return;
     const labeled = store.threads.labelIds(threadIds);
-    const candidates = threadIds.filter((id) => labeled.get(id)?.includes(settled.id));
+    const candidates = threadIds.filter((id) => labeled.get(id)?.some((l) => states.has(l)));
     if (candidates.length === 0) return;
     const newIds = new Set(messageIds);
     const reopen = candidates.filter((threadId) => {
@@ -1008,10 +1014,10 @@ export class AccountWorker {
     });
     if (reopen.length === 0) return;
     try {
-      this.#deps.services.threads.unsettle(reopen);
-      this.#log.info("new mail un-settled conversations", { count: reopen.length });
+      this.#deps.services.threads.reopen(reopen);
+      this.#log.info("new mail brought conversations back", { count: reopen.length });
     } catch (error) {
-      this.#log.warn("couldn't un-settle conversations with new mail", { error: (error as Error).message });
+      this.#log.warn("couldn't bring back conversations with new mail", { error: (error as Error).message });
     }
   }
 

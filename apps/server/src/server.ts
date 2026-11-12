@@ -126,6 +126,20 @@ export async function createServer(config: ServerConfig, options: CreateServerOp
       });
     }
 
+    // Waiting and snoozed conversations come back when their time is up (checked every 30 s,
+    // and once now for the ones that ran out while the app was closed).
+    const wake = () => {
+      try {
+        const woken = services.threads.wakeDue();
+        if (woken.length > 0) log.info("conversations came back", { count: woken.length });
+      } catch (error) {
+        log.warn("could not bring back waiting or snoozed conversations", { error });
+      }
+    };
+    wake();
+    const wakeTimer = setInterval(wake, 30_000);
+    wakeTimer.unref?.();
+
     try {
       const removed = services.uploads.cleanup();
       if (removed > 0) log.info("removed old uploads", { count: removed });
@@ -153,6 +167,7 @@ export async function createServer(config: ServerConfig, options: CreateServerOp
         log.info("closing");
         http.setMcpHandler(null);
         stopGuide();
+        clearInterval(wakeTimer);
         try {
           await mcp?.close?.();
         } catch (error) {

@@ -2,7 +2,7 @@
  * The query cache is the client's copy of the server. Nothing goes stale by time: the server
  * says what changed (`invalidate` events) and after a reconnect everything is refetched.
  */
-import { findSettledLabel, isReservedLabelName } from "@fancy-mail/contracts";
+import { findStateLabel, isReservedLabelName, type StateLabelKey, type ThreadMark, type ThreadTimer } from "@fancy-mail/contracts";
 import type { Account, Bootstrap, Group, Label, ThreadDetail, ThreadSummary } from "@fancy-mail/contracts";
 import {
   keepPreviousData,
@@ -40,6 +40,7 @@ export const qk = {
   facets: (query: string) => ["facets", query] as const,
   threadAll: ["thread"] as const,
   thread: (id: string) => ["thread", id] as const,
+  threadStates: ["threadStates"] as const,
   activity: ["activity"] as const,
   drafts: ["drafts"] as const,
   quickSearch: (text: string) => ["quick-search", text] as const,
@@ -175,6 +176,8 @@ export interface Directory {
   ownAddresses: Set<string>;
   /** The Settled label (null until something is settled). */
   settledLabelId: string | null;
+  /** Fancy Mail's own labels for where a conversation stands (missing until first used). */
+  stateLabelIds: Partial<Record<StateLabelKey, string>>;
 }
 
 let directoryCache: { source: Bootstrap | undefined; value: Directory } | null = null;
@@ -193,10 +196,36 @@ export function directoryOf(bootstrap: Bootstrap | undefined): Directory {
     groupById: new Map(groups.map((g) => [g.id, g])),
     labelById: new Map(labels.map((l) => [l.id, l])),
     ownAddresses: new Set(accounts.map((a) => a.email.toLowerCase())),
-    settledLabelId: findSettledLabel(all)?.id ?? null,
+    settledLabelId: findStateLabel(all, "settled")?.id ?? null,
+    stateLabelIds: Object.fromEntries(
+      (["settled", "waiting", "snoozed", "pinned"] as const).flatMap((key) => {
+        const label = findStateLabel(all, key);
+        return label ? [[key, label.id]] : [];
+      }),
+    ),
   };
   directoryCache = { source: bootstrap, value };
   return value;
+}
+
+export interface ThreadStates {
+  timers: Map<string, ThreadTimer>;
+  marks: Map<string, ThreadMark>;
+}
+
+const NO_STATES: ThreadStates = { timers: new Map(), marks: new Map() };
+
+/** When waiting and snoozed conversations come back, and why some came back. */
+export function useThreadStates(): ThreadStates {
+  const { data } = useQuery({
+    queryKey: qk.threadStates,
+    queryFn: async () => {
+      const { timers, marks } = await rpc("threads.states", {});
+      return { timers: new Map(timers.map((t) => [t.threadId, t])), marks: new Map(marks.map((m) => [m.threadId, m])) } satisfies ThreadStates;
+    },
+    placeholderData: keepPreviousData,
+  });
+  return data ?? NO_STATES;
 }
 
 export function useDirectory(): Directory {

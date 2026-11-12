@@ -186,6 +186,12 @@ const ACTION_NAMES = [
   "not_spam",
   "settle",
   "unsettle",
+  "wait",
+  "unwait",
+  "snooze",
+  "unsnooze",
+  "pin",
+  "unpin",
 ] as const;
 
 const SIMPLE_ACTIONS: Record<string, ModifyAction["type"]> = {
@@ -201,6 +207,42 @@ const SIMPLE_ACTIONS: Record<string, ModifyAction["type"]> = {
   not_spam: "notSpam",
   settle: "settle",
   unsettle: "unsettle",
+  unwait: "unwait",
+  unsnooze: "unsnooze",
+  pin: "pin",
+  unpin: "unpin",
+};
+
+/**
+ * When a wait or snooze ends: "7d", "2w", "3h", a date ("2026-11-26", 09:00 that day) or a date
+ * and time ("2026-11-26T14:00"), in the user's time zone. Null when it can't be read.
+ */
+export function parseUntil(value: string, now = Date.now()): number | null {
+  const v = value.trim();
+  const relative = /^(\d+)\s*([hdwm])$/i.exec(v);
+  if (relative) {
+    const n = Number(relative[1]);
+    const unit = relative[2]!.toLowerCase();
+    if (unit === "h") return now + n * 3_600_000;
+    const at = new Date(now);
+    if (unit === "d") at.setDate(at.getDate() + n);
+    if (unit === "w") at.setDate(at.getDate() + n * 7);
+    if (unit === "m") at.setMonth(at.getMonth() + n);
+    at.setHours(9, 0, 0, 0);
+    return at.getTime();
+  }
+  const date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (date) return new Date(Number(date[1]), Number(date[2]) - 1, Number(date[3]), 9, 0, 0, 0).getTime();
+  const parsed = Date.parse(v);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+/** The state labels as actions: add_labels Settled is settle, remove_labels Waiting is unwait. */
+const STATE_LABEL_ACTIONS: Record<string, { add: ModifyAction["type"] | null; remove: ModifyAction["type"] }> = {
+  settled: { add: "settle", remove: "unsettle" },
+  pinned: { add: "pin", remove: "unpin" },
+  waiting: { add: null, remove: "unwait" },
+  snoozed: { add: null, remove: "unsnooze" },
 };
 
 // ── The server ──────────────────────────────────────────────────────────────────────────────
@@ -407,13 +449,17 @@ export function buildMcpServer(api: McpMailApi, actor: () => Actor, version: str
     const actionSchema = z.object({
       type: z.enum(ACTION_NAMES),
       labels: z.array(z.string()).optional().describe("label names, for add_labels / remove_labels"),
+      until: z
+        .string()
+        .optional()
+        .describe('wait / snooze: when it comes back — "7d", "2w", "3h", "2026-11-26" (09:00) or "2026-11-26T14:00"'),
     });
     server.registerTool(
       "mail_organize",
       {
         title: "Organize conversations",
         description:
-          'Apply actions to conversations, given by thread_ids or by a query (every match, up to max_threads). Actions run in order: add_labels/remove_labels (with labels: names), mark_read, mark_unread, star, unstar, archive (out of the inbox, kept in All mail), move_to_inbox, trash, restore, mark_spam, not_spam, settle (the user is done with it: the Settled label, and read; it stays where it is), unsettle. Missing labels are created unless create_missing_labels is false. Returns what changed and an activity id; the user sees it in Activity and either of you can undo it with mail_activity. Example: {"query": "from:adpilot.example has:attachment -label:Invoices", "actions": [{"type": "add_labels", "labels": ["Invoices"]}, {"type": "archive"}]}',
+          'Apply actions to conversations, given by thread_ids or by a query (every match, up to max_threads). Actions run in order: add_labels/remove_labels (with labels: names), mark_read, mark_unread, star, unstar, archive (out of the inbox, kept in All mail), move_to_inbox, trash, restore, mark_spam, not_spam, and where a conversation stands: settle (done with it; read, stays where it is), wait (the user did their part and waits for an answer; needs until — back with "No reply" then, or as soon as an answer comes), snooze (theirs to do later; needs until), pin (kept on top), and unsettle / unwait / unsnooze / unpin. Missing labels are created unless create_missing_labels is false. Returns what changed and an activity id; the user sees it in Activity and either of you can undo it with mail_activity. Example: {"query": "from:adpilot.example has:attachment -label:Invoices", "actions": [{"type": "add_labels", "labels": ["Invoices"]}, {"type": "archive"}]}',
         inputSchema: {
           thread_ids: z.array(z.string()).min(1).max(500).optional(),
           query: z.string().optional().describe("act on every conversation this query matches"),
@@ -492,9 +538,12 @@ export function buildMcpServer(api: McpMailApi, actor: () => Actor, version: str
               if (!action.labels?.length) return fail(`${action.type} needs labels, e.g. {"type": "${action.type}", "labels": ["Invoices"]}.`);
               const labelIds: string[] = [];
               for (const name of action.labels) {
-                // The Settled label means settle / unsettle (it is Fancy Mail's own).
+                // Fancy Mail's own labels mean their actions (add_labels Settled is settle).
                 if (isReservedLabelName(name)) {
-                  modify.push({ type: action.type === "add_labels" ? "settle" : "unsettle" });
+                  const state = STATE_LABEL_ACTIONS[name.trim().toLowerCase()]!;
+                  const type = action.type === "add_labels" ? state.add : state.remove;
+                  if (!type) return fail(`${name.trim()} needs a time: use {"type": "${name.trim().toLowerCase() === "waiting" ? "wait" : "snooze"}", "until": "7d"}.`);
+                  modify.push({ type } as ModifyAction);
                   continue;
                 }
                 let label = findLabel(api, name);
@@ -508,6 +557,12 @@ export function buildMcpServer(api: McpMailApi, actor: () => Actor, version: str
                 labelIds.push(label.id);
               }
               if (labelIds.length > 0) modify.push({ type: action.type === "add_labels" ? "addLabels" : "removeLabels", labelIds });
+            } else if (action.type === "wait" || action.type === "snooze") {
+              const until = action.until ? parseUntil(action.until) : null;
+              if (until === null || until <= Date.now()) {
+                return fail(`${action.type} needs until in the future, e.g. {"type": "${action.type}", "until": "7d"} or "2026-11-26".`);
+              }
+              modify.push({ type: action.type, until });
             } else {
               modify.push({ type: SIMPLE_ACTIONS[action.type]! } as ModifyAction);
             }

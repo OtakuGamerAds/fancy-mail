@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { COLOR_PALETTE, findSettledLabel } from "@fancy-mail/contracts";
+import { COLOR_PALETTE, findStateLabel } from "@fancy-mail/contracts";
 import type { Actor, Address, ModifyAction } from "@fancy-mail/contracts";
 
 import { idFromBytes } from "../db/ids.ts";
@@ -15,7 +15,7 @@ import { safeFilename } from "../services/files.ts";
 import type { ServiceEnv } from "../services/env.ts";
 import { writeActivity } from "../services/env.ts";
 import { planAction, summarize } from "../services/mutate.ts";
-import { ensureSettledLabel } from "../services/settled.ts";
+import { ensureStateLabel } from "../services/settled.ts";
 import { applyChange } from "../services/threads.ts";
 import type { MailboxRecord } from "../store/types.ts";
 import * as content from "./content.ts";
@@ -688,9 +688,44 @@ function seedActivity(env: ServiceEnv, input: { now: number; rng: Rng; byKind: M
     return row !== null && row.unread_count === 0 && row.starred === 0 && row.draft_count === 0 && input.now - row.last_message_at > 3 * DAY;
   });
   if (done.length > 0) {
-    ensureSettledLabel(store, input.now - 3 * DAY);
+    ensureStateLabel(store, "settled", input.now - 3 * DAY);
     record({ kind: "user" }, input.now - DAY, done.filter((_, i) => i % 5 !== 0), [{ type: "settle" }]);
   }
+
+  // The other states, a few each: a partner thread pinned, answers waited for (one ran out,
+  // one came), and something snoozed.
+  const open = inInbox(all).filter((tid) => !(store.threads.labelIds([tid]).get(tid) ?? []).length);
+  const pick = (n: number, ok: (row: NonNullable<ReturnType<typeof store.threads.get>>) => boolean) => {
+    const out: string[] = [];
+    for (const tid of open) {
+      const row = store.threads.get(tid);
+      if (out.length < n && row && ok(row) && !used.has(tid)) {
+        out.push(tid);
+        used.add(tid);
+      }
+    }
+    return out;
+  };
+  const used = new Set<string>();
+  const pinned = pick(1, (r) => r.starred === 1);
+  const waiting = pick(2, (r) => r.unread_count === 0 && r.message_count > 1);
+  const snoozed = pick(1, (r) => r.unread_count === 0);
+  const noReply = pick(1, (r) => r.unread_count === 0 && r.message_count > 1);
+  const replied = pick(1, (r) => r.unread_count > 0 && r.message_count > 1);
+  for (const key of ["pinned", "waiting", "snoozed"] as const) ensureStateLabel(store, key, input.now - 3 * DAY);
+  record({ kind: "user" }, input.now - 5 * HOUR, pinned, [{ type: "pin" }]);
+  waiting.forEach((tid, i) => {
+    const until = input.now + (i === 0 ? 5 : 12) * DAY;
+    record({ kind: "user" }, input.now - (i + 2) * DAY, [tid], [{ type: "wait", until }]);
+    store.threadStates.setTimer({ threadId: tid, kind: "waiting", until, setAt: input.now - (i + 2) * DAY });
+  });
+  for (const tid of snoozed) {
+    const until = input.now + 2 * DAY;
+    record({ kind: "user" }, input.now - 6 * HOUR, [tid], [{ type: "snooze", until }]);
+    store.threadStates.setTimer({ threadId: tid, kind: "snoozed", until, setAt: input.now - 6 * HOUR });
+  }
+  for (const tid of noReply) store.threadStates.setMark({ threadId: tid, kind: "noReply", at: input.now - 3 * HOUR });
+  for (const tid of replied) store.threadStates.setMark({ threadId: tid, kind: "replied", at: input.now - 2 * HOUR });
 }
 
 /** Deletes every demo account with its mail, files and activity. Labels stay. */
@@ -711,9 +746,11 @@ export function removeDemo(env: ServiceEnv): string[] {
     const labels = kept
       ? (JSON.parse(kept) as string[])
       : DEMO_LABELS.map((l) => store.labels.findByName(l.name)?.id).filter((x): x is string => !!x);
-    // Settled too, when only demo mail carried it (it comes back with the next settle).
-    const settled = findSettledLabel(store.labels.list());
-    if (settled) labels.push(settled.id);
+    // Fancy Mail's own labels too, when only demo mail carried them (they come back when used).
+    for (const key of ["settled", "waiting", "snoozed", "pinned"] as const) {
+      const label = findStateLabel(store.labels.list(), key);
+      if (label) labels.push(label.id);
+    }
     for (const labelId of labels) {
       if (store.labels.get(labelId) && store.labels.messagesWithLabel(labelId).length === 0) store.labels.delete(labelId);
     }

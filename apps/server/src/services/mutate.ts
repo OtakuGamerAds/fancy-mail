@@ -15,12 +15,12 @@
  * Restore and not-spam return messages to where they were (remembered on the message), or to
  * the inbox.
  */
-import { findSettledLabel } from "@fancy-mail/contracts";
 import type { MailboxRole, ModifyAction } from "@fancy-mail/contracts";
 
 import { newId } from "../db/ids.ts";
 import type { OutboxMessageChange, OutboxPayload } from "../store/activity.ts";
 import type { Store } from "../store/index.ts";
+import { stateLabelIds } from "./settled.ts";
 import type { MailboxRecord, MessageLocation, MessageRecord } from "../store/types.ts";
 
 export interface MessageDelta {
@@ -179,7 +179,20 @@ export function planAction(
   const states = loadStates(env.store, threadIds);
   const boxes = mailboxResolver(env);
   const deltas: MessageDelta[] = [];
-  const settledLabelId = findSettledLabel(env.store.labels.list())?.id ?? null;
+  const stateIds = stateLabelIds(env.store);
+  /**
+   * A state change on every message: adds `add` (where missing), takes the other states off,
+   * and reads it when asked. Settled, Waiting and Snoozed exclude each other and Pinned.
+   */
+  const changeState = (thread: MessageState[], add: string | undefined, remove: (string | undefined)[], read: boolean) => {
+    for (const s of thread) {
+      const d = blank(s.message.id);
+      if (add && !s.labels.has(add)) d.addLabels.push(add);
+      for (const id of remove) if (id && s.labels.has(id)) d.removeLabels.push(id);
+      if (read && s.message.unread) d.unread = false;
+      if (!isEmpty(d)) deltas.push(d);
+    }
+  };
   const gmailCache = new Map<string, boolean>();
   const isGmail = (accountId: string) => {
     if (!gmailCache.has(accountId)) gmailCache.set(accountId, boxes.byRole(accountId, "all") !== null);
@@ -286,19 +299,30 @@ export function planAction(
         }
         break;
       }
+      // Every message carries the label (so it shows in Gmail on any of them).
       case "settle":
-        // Every message carries the label (so it shows in Gmail on any of them) and is read.
-        if (!settledLabelId) break;
-        for (const s of thread) {
-          const d = blank(s.message.id);
-          if (!s.labels.has(settledLabelId)) d.addLabels.push(settledLabelId);
-          if (s.message.unread) d.unread = false;
-          if (!isEmpty(d)) deltas.push(d);
-        }
+        if (stateIds.settled) changeState(thread, stateIds.settled, [stateIds.waiting, stateIds.snoozed, stateIds.pinned], true);
+        break;
+      case "wait":
+        if (stateIds.waiting) changeState(thread, stateIds.waiting, [stateIds.settled, stateIds.snoozed, stateIds.pinned], true);
+        break;
+      case "snooze":
+        if (stateIds.snoozed) changeState(thread, stateIds.snoozed, [stateIds.settled, stateIds.waiting, stateIds.pinned], false);
+        break;
+      case "pin":
+        if (stateIds.pinned) changeState(thread, stateIds.pinned, [stateIds.settled, stateIds.waiting, stateIds.snoozed], false);
         break;
       case "unsettle":
-        if (!settledLabelId) break;
-        for (const s of thread) if (s.labels.has(settledLabelId)) deltas.push({ ...blank(s.message.id), removeLabels: [settledLabelId] });
+        changeState(thread, undefined, [stateIds.settled], false);
+        break;
+      case "unwait":
+        changeState(thread, undefined, [stateIds.waiting], false);
+        break;
+      case "unsnooze":
+        changeState(thread, undefined, [stateIds.snoozed], false);
+        break;
+      case "unpin":
+        changeState(thread, undefined, [stateIds.pinned], false);
         break;
       case "addLabels":
       case "removeLabels": {
@@ -481,6 +505,11 @@ function conversations(n: number): string {
   return n === 1 ? "1 conversation" : `${n.toLocaleString("en-US")} conversations`;
 }
 
+/** "Nov 26, 09:00" (the user's time zone; the server runs on their computer). */
+function shortDate(ms: number): string {
+  return new Date(ms).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
 function quoteList(names: string[]): string {
   if (names.length <= 1) return names.join("");
   return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
@@ -514,6 +543,18 @@ export function summarize(actions: ModifyAction[], count: number, labelName: (id
         return `Settled ${n}`;
       case "unsettle":
         return `Un-settled ${n}`;
+      case "wait":
+        return `Waiting on ${n} until ${shortDate(a.until)}`;
+      case "unwait":
+        return `Stopped waiting on ${n}`;
+      case "snooze":
+        return `Snoozed ${n} until ${shortDate(a.until)}`;
+      case "unsnooze":
+        return `Woke ${n}`;
+      case "pin":
+        return `Pinned ${n}`;
+      case "unpin":
+        return `Unpinned ${n}`;
       case "addLabels":
         return `Labeled ${n} ${quoteList(a.labelIds.map(labelName))}`;
       case "removeLabels":

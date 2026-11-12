@@ -1,4 +1,4 @@
-import { isReservedLabelName } from "@fancy-mail/contracts";
+import { isReservedLabelName, STATE_LABELS, type StateLabelKey } from "@fancy-mail/contracts";
 import type { Label } from "@fancy-mail/contracts";
 
 import { newId } from "../db/ids.ts";
@@ -9,7 +9,7 @@ import { requireAnyAccess, visibleAccountIds } from "./context.ts";
 import type { CallContext } from "./context.ts";
 import { invalidate, notifyOutbox, writeActivity } from "./env.ts";
 import type { ServiceEnv } from "./env.ts";
-import { ensureSettledLabel } from "./settled.ts";
+import { ensureStateLabel } from "./settled.ts";
 import { applyChange } from "./threads.ts";
 import type { MessageDelta } from "./mutate.ts";
 
@@ -35,7 +35,7 @@ export function createLabelsService(env: ServiceEnv) {
     if (!clean) throw new AppError("bad_request", "A label needs a name.");
     if (clean.length > 100) throw new AppError("bad_request", "Label names can be at most 100 characters.");
     if (RESERVED.has(clean.toLowerCase())) throw new AppError("bad_request", `"${clean}" is reserved by search (label:none). Pick another name.`);
-    if (isReservedLabelName(clean)) throw new AppError("bad_request", `"${clean}" is kept for settled conversations. Pick another name.`);
+    if (isReservedLabelName(clean)) throw new AppError("bad_request", `"${clean}" is Fancy Mail's own label (where a conversation stands). Pick another name.`);
     return clean;
   }
 
@@ -126,8 +126,10 @@ export function createLabelsService(env: ServiceEnv) {
     /** The label with this name, created when missing. */
     ensure(name: string, ctx: CallContext): Label {
       if (isReservedLabelName(name)) {
-        requireAnyAccess(ctx, store.accounts.list(), "organize", "Settling conversations");
-        const { label, created } = env.db.tx(() => ensureSettledLabel(store, env.now()));
+        requireAnyAccess(ctx, store.accounts.list(), "organize", "Changing where conversations stand");
+        const lower = name.trim().toLocaleLowerCase();
+        const key = (Object.keys(STATE_LABELS) as StateLabelKey[]).find((k) => STATE_LABELS[k].toLocaleLowerCase() === lower)!;
+        const { label, created } = env.db.tx(() => ensureStateLabel(store, key, env.now()));
         if (created) invalidate(env, ["labels"]);
         return toLabel(label, counts(ctx));
       }

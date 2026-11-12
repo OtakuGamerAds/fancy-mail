@@ -61,6 +61,8 @@ export function useSwipeAction(run: (() => void) | null) {
 
   const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     if (!runRef.current || event.button !== 0 || gesture.current) return;
+    // A menu opened from the row lives elsewhere in the page (its events still bubble here).
+    if (!event.currentTarget.contains(event.target as Node)) return;
     if ((event.target as HTMLElement).closest("button, a, input, [role=checkbox]")) return;
     gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, width: event.currentTarget.offsetWidth, swiping: false };
   };
@@ -100,7 +102,7 @@ export function useSwipeAction(run: (() => void) | null) {
   };
 
   const onWheel = (event: ReactWheelEvent<HTMLElement>) => {
-    if (!runRef.current || event.ctrlKey) return;
+    if (!runRef.current || event.ctrlKey || !event.currentTarget.contains(event.target as Node)) return;
     const w = wheel.current;
     if (!w && (event.deltaX <= 0 || Math.abs(event.deltaX) < Math.abs(event.deltaY) * 1.5)) return;
     const current = w ?? { offset: 0, width: event.currentTarget.offsetWidth, timer: null };

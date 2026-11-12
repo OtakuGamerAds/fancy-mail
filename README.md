@@ -17,10 +17,18 @@ only do what you allowed per account.
 - **One search language** everywhere — the search box, the sidebar views, the command palette
   (`Ctrl K`) and the agents all use it:
   `from:ads@ has:attachment after:2026-07-01 label:Invoices -label:Newsletters group:Banking`
-- **Settle what you're done with.** Hover a conversation and click **Settle**, swipe it to the
-  left, or press `Ctrl Shift S`. It folds into the **Settled** section at the bottom of the list
-  (one click opens it) and stays where it is in Gmail, with a **Settled** label. A new reply,
-  or one you send, brings it back. `is:settled` and `is:unsettled` search for them.
+- **Your list is what's your turn.** Every conversation stands somewhere, and the list shows it
+  (as T3 Code does with threads):
+  - **Settle** what you're done with: hover and click **Settle**, swipe it left, or `Ctrl Shift S`.
+  - **Wait for an answer** once you've done your part: pick how long (3 days, a week, two…), or
+    use **Send and wait** (the hourglass next to Send). An answer brings it back as **Replied**;
+    none by then brings it back as **No reply**, so you know to follow up.
+  - **Snooze** what's yours to do later: it comes back then, or sooner if new mail comes.
+  - **Pin** what should stay on top (`Ctrl Shift P`).
+
+  Waiting, Snoozed and Settled fold into sections at the foot of the list, one click away. They
+  are labels (Waiting, Snoozed, Settled, Pinned), so Gmail shows them too; the mail stays where
+  it is. Search with `is:waiting`, `is:snoozed`, `is:settled`, `is:pinned`.
 - **Labels across accounts.** "Invoices" is one label for every account. On Gmail it is a real
   Gmail label, elsewhere an IMAP keyword — your organization survives this app.
 - **Signed in once.** Gmail with an app password (or Google sign-in), Outlook with Microsoft
@@ -29,7 +37,7 @@ only do what you allowed per account.
 - **Private by default.** Remote images in emails are blocked until you allow them, per
   message or per sender. Emails render in a sandbox, never with scripts.
 - **Undo everything.** Archive, trash, labels, read state — by you or by an agent.
-- **Keyboard first.** `c` compose · `/` search · `j`/`k` move · `Ctrl Shift S` settle · `e` archive · `#` trash ·
+- **Keyboard first.** `c` compose · `/` search · `j`/`k` move · `Ctrl Shift S` settle · `Ctrl Shift P` pin · `e` archive · `#` trash ·
   `s` star · `l` label · `r` reply · `z` undo · `?` all shortcuts.
 
 ## Agents (MCP)

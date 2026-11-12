@@ -77,6 +77,7 @@ function handle(event: ServerEvent) {
         void queryClient.invalidateQueries({ queryKey: qk.threadsAll });
         void queryClient.invalidateQueries({ queryKey: ["quick-search"] });
         void queryClient.invalidateQueries({ queryKey: qk.facetsAll });
+        void queryClient.invalidateQueries({ queryKey: qk.threadStates });
         // Counts in the sidebar come with bootstrap.
         void queryClient.invalidateQueries({ queryKey: qk.bootstrap });
       }

@@ -5,7 +5,7 @@
  * Unknown labels, accounts and groups are reported in `errors` and make the query match
  * nothing, so an agent sees what exists instead of a silently wrong answer.
  */
-import { findSettledLabel } from "@fancy-mail/contracts";
+import { findStateLabel } from "@fancy-mail/contracts";
 import type { FieldKey, ParsedQuery, QueryTerm } from "@fancy-mail/contracts";
 
 import type { SqlValue } from "../db/sqlite.ts";
@@ -122,9 +122,10 @@ export function compileQuery(parsed: ParsedQuery, lookups: CompileLookups, optio
         break;
       }
       case "is": {
-        if (term.value === "settled" || term.value === "unsettled") {
-          // Settled: carries the Settled label (none yet: nothing is settled).
-          const label = findSettledLabel(lookups.labels);
+        if (term.value === "settled" || term.value === "unsettled" || term.value === "waiting" || term.value === "snoozed" || term.value === "pinned") {
+          // Where it stands: carries that state's label (none yet: nothing is in that state).
+          const key = term.value === "unsettled" ? "settled" : term.value;
+          const label = findStateLabel(lookups.labels, key);
           const sql = label ? "t.id IN (SELECT tl.thread_id FROM thread_labels tl WHERE tl.label_id = ?)" : NOTHING;
           addTerm(term.negated !== (term.value === "unsettled"), sql, ...(label ? [label.id] : []));
           break;

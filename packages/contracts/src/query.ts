@@ -17,7 +17,7 @@ export const IN_VALUES = [
 ] as const;
 export type InValue = (typeof IN_VALUES)[number];
 
-export const IS_VALUES = ["unread", "read", "starred", "unstarred", "draft", "settled", "unsettled"] as const;
+export const IS_VALUES = ["unread", "read", "starred", "unstarred", "draft", "settled", "unsettled", "waiting", "snoozed", "pinned"] as const;
 export type IsValue = (typeof IS_VALUES)[number];
 
 /** Gmail's inbox categories. Mail from other providers, and Gmail mail not sorted yet, is primary. */
@@ -260,7 +260,8 @@ export const QUERY_SYNTAX_HELP = [
   "Words and \"quoted phrases\" match subject, people, body and attachment names.",
   "from: to: cc: subject: filename: — match one field (filename:pdf finds PDFs).",
   "is:unread is:read is:starred is:unstarred is:draft · has:attachment",
-  "is:settled is:unsettled (settled: done with, the Settled label; a new message makes it unsettled again)",
+  "is:settled is:waiting is:snoozed is:pinned is:unsettled — where a conversation stands (Fancy Mail's own labels):",
+  "  settled: done with · waiting: waiting for an answer · snoozed: later · pinned: kept on top; new mail brings them back",
   "in:inbox in:sent in:drafts in:archive in:starred in:trash in:spam in:anywhere",
   "  (without in:, everything except trash and spam is searched)",
   "label:Invoices label:none · account:me@gmail.com · group:Banking group:none",

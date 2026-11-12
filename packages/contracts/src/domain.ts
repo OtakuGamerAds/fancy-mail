@@ -106,13 +106,31 @@ export type Group = z.infer<typeof Group>;
  * organization survives even if this app is gone.
  */
 /**
- * Fancy Mail's own label: a conversation you are done with carries it (Gmail and other apps show
- * it as a plain label). The name is reserved: it can't be given to another label.
+ * Where a conversation stands, as Fancy Mail's own labels (Gmail and other apps show them as
+ * plain labels; the names are reserved):
+ *   Settled  done with it.
+ *   Waiting  you did your part and wait for an answer; back with "No reply" when the time is up,
+ *            or with "Replied" as soon as one comes.
+ *   Snoozed  yours to do, later; back at the time (or when new mail comes).
+ *   Pinned   kept at the top.
+ * A conversation without Settled, Waiting or Snoozed is active: your turn.
  */
 export const SETTLED_LABEL = "Settled";
+export const WAITING_LABEL = "Waiting";
+export const SNOOZED_LABEL = "Snoozed";
+export const PINNED_LABEL = "Pinned";
+
+export const STATE_LABELS = { settled: SETTLED_LABEL, waiting: WAITING_LABEL, snoozed: SNOOZED_LABEL, pinned: PINNED_LABEL } as const;
+export type StateLabelKey = keyof typeof STATE_LABELS;
 
 /** Label names kept for Fancy Mail's own use. */
-export const RESERVED_LABELS: readonly string[] = [SETTLED_LABEL];
+export const RESERVED_LABELS: readonly string[] = Object.values(STATE_LABELS);
+
+/** One of Fancy Mail's own labels among these, if it exists yet (made the first time it's used). */
+export function findStateLabel<T extends { name: string }>(labels: readonly T[], key: StateLabelKey): T | null {
+  const lower = STATE_LABELS[key].toLocaleLowerCase();
+  return labels.find((l) => l.name.trim().toLocaleLowerCase() === lower) ?? null;
+}
 
 export function isReservedLabelName(name: string): boolean {
   const lower = name.trim().toLocaleLowerCase();
@@ -121,9 +139,28 @@ export function isReservedLabelName(name: string): boolean {
 
 /** The Settled label among these, if it exists yet (made the first time something is settled). */
 export function findSettledLabel<T extends { name: string }>(labels: readonly T[]): T | null {
-  const lower = SETTLED_LABEL.toLocaleLowerCase();
-  return labels.find((l) => l.name.trim().toLocaleLowerCase() === lower) ?? null;
+  return findStateLabel(labels, "settled");
 }
+
+/** When a waiting or snoozed conversation comes back. */
+export const ThreadTimer = z.object({
+  threadId: z.string(),
+  kind: z.enum(["waiting", "snoozed"]),
+  until: z.number(),
+  setAt: z.number(),
+});
+export type ThreadTimer = z.infer<typeof ThreadTimer>;
+
+/**
+ * Why a conversation came back, shown on its row until it's opened: an answer came while you
+ * waited, the wait ran out with no answer, or a snooze ended.
+ */
+export const ThreadMark = z.object({
+  threadId: z.string(),
+  kind: z.enum(["replied", "noReply", "woke"]),
+  at: z.number(),
+});
+export type ThreadMark = z.infer<typeof ThreadMark>;
 
 export const Label = z.object({
   id: z.string(),

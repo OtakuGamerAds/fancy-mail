@@ -24,7 +24,11 @@ export type ThreadCommand =
   | "star"
   | "unstar"
   | "settle"
-  | "unsettle";
+  | "unsettle"
+  | "unwait"
+  | "unsnooze"
+  | "pin"
+  | "unpin";
 
 const LEAVES_VIEW: Partial<Record<ThreadCommand, true>> = {
   archive: true,
@@ -36,13 +40,16 @@ const LEAVES_VIEW: Partial<Record<ThreadCommand, true>> = {
   settle: true,
 };
 
+/** Commands that take a time (when it comes back). */
+export type TimedCommand = "wait" | "snooze";
+
 /** Whether the command removes the conversation from what the person is looking at. */
-function leavesCurrentView(command: ThreadCommand): boolean {
-  if (!LEAVES_VIEW[command]) return false;
+function leavesCurrentView(command: ThreadCommand | TimedCommand): boolean {
+  if (command !== "wait" && command !== "snooze" && !LEAVES_VIEW[command]) return false;
   const route = useUi.getState().route;
   if (route.page !== "mail") return false;
   const kind = route.view.kind;
-  if (command === "settle") return splitsSettled(route.view, useUi.getState().search);
+  if (command === "settle" || command === "wait" || command === "snooze") return splitsSettled(route.view, useUi.getState().search);
   if (command === "moveToInbox") return kind === "archive";
   if (command === "archive") return kind === "inbox" || kind === "unread";
   if (command === "restore") return kind === "trash";
@@ -51,6 +58,16 @@ function leavesCurrentView(command: ThreadCommand): boolean {
 }
 
 export async function runThreadCommand(command: ThreadCommand, threadIds: string[]) {
+  return runThreadAction({ type: command } as ModifyAction, threadIds);
+}
+
+/** Waits for an answer, or snoozes, until then: out of the active list. */
+export function runTimedCommand(command: TimedCommand, threadIds: string[], until: number) {
+  return runThreadAction({ type: command, until }, threadIds);
+}
+
+async function runThreadAction(action: ModifyAction, threadIds: string[]) {
+  const command = action.type as ThreadCommand | TimedCommand;
   if (threadIds.length === 0) return;
   const ui = useUi.getState();
   const route = ui.route;
@@ -59,8 +76,7 @@ export async function runThreadCommand(command: ThreadCommand, threadIds: string
   if (route.page === "mail" && leavesCurrentView(command)) {
     // Move the reader and the keyboard focus on before the rows disappear (after settling, to
     // the next one that isn't settled).
-    const settledId = command === "settle" ? directoryOf(queryClient.getQueryData(qk.bootstrap)).settledLabelId : null;
-    const skip = settledId ? (t: ThreadSummary) => isSettled(t, settledId) : undefined;
+    const skip = command === "settle" || command === "wait" || command === "snooze" ? notActive() : undefined;
     if (openId && threadIds.includes(openId)) {
       const next = neighborAfterRemoving(threadIds, openId, skip);
       navigate({ ...route, threadId: next }, { replace: true });
@@ -70,7 +86,34 @@ export async function runThreadCommand(command: ThreadCommand, threadIds: string
     }
     ui.setSelection(ui.selection.filter((id) => !threadIds.includes(id)));
   }
-  await modifyThreads(threadIds, [{ type: command } as ModifyAction]);
+  await modifyThreads(threadIds, [action]);
+}
+
+/** Rows that aren't a good next stop after settling, waiting or snoozing: not active ones. */
+function notActive(): (t: ThreadSummary) => boolean {
+  const ids = directoryOf(queryClient.getQueryData(qk.bootstrap)).stateLabelIds;
+  const off = [ids.settled, ids.waiting, ids.snoozed].filter((id): id is string => !!id);
+  return (t) => t.labelIds.some((id) => off.includes(id));
+}
+
+/** Where a conversation stands, from its labels. */
+export type ThreadState = "active" | "pinned" | "waiting" | "snoozed" | "settled";
+
+export function threadState(thread: Pick<ThreadSummary, "labelIds">, ids: Partial<Record<"settled" | "waiting" | "snoozed" | "pinned", string>>): ThreadState {
+  const has = (id: string | undefined) => !!id && thread.labelIds.includes(id);
+  if (has(ids.snoozed)) return "snoozed";
+  if (has(ids.waiting)) return "waiting";
+  if (has(ids.settled)) return "settled";
+  if (has(ids.pinned)) return "pinned";
+  return "active";
+}
+
+/** Pin all, unless all are pinned already (then unpin). */
+export function togglePin(ids: string[]) {
+  const pinnedId = directoryOf(queryClient.getQueryData(qk.bootstrap)).stateLabelIds.pinned ?? null;
+  const list = summaries(ids);
+  const allPinned = pinnedId !== null && list.length > 0 && list.every((t) => t.labelIds.includes(pinnedId));
+  void runThreadCommand(allPinned ? "unpin" : "pin", ids);
 }
 
 function summaries(ids: string[]): ThreadSummary[] {

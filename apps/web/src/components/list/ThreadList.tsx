@@ -4,17 +4,25 @@
  * sidebar), and the virtualized rows. New messages still being written sit at the top of
  * their inbox. When the view or the search changes, the new rows slide in.
  *
- * Settled conversations fold into the Settled section at the bottom, as in T3 Code's sidebar:
- * its header stays at the foot of the pane (sticky) with the count; opened, they follow the
- * rest, dimmed, in a list of their own. Searching shows everything in place.
+ * Where conversations stand shapes the list, as T3 Code's sidebar: pinned ones on top, then
+ * what's your turn, then the sections of what's out of the way — Waiting (for an answer),
+ * Snoozed, Settled. Their headers stay at the foot of the pane with their counts; opened, their
+ * conversations follow, dimmed, each section a list of its own. Searching shows everything in
+ * place.
  */
-import type { Draft, InboxTab, ThreadSummary } from "@fancy-mail/contracts";
+import { scopeQuery, type Draft, type InboxTab, type ThreadSummary } from "@fancy-mail/contracts";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
+  AlarmClockIcon,
+  AlarmClockOffIcon,
   CircleCheckIcon,
+  HourglassIcon,
   InboxIcon,
+  PinIcon,
+  PinOffIcon,
+  TimerOffIcon,
   InfoIcon,
   MailIcon,
   MailOpenIcon,
@@ -36,6 +44,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { IconButton, ShowSidebarButton } from "~/components/common";
 import { LabelPickerContent, LabelPickerPopover } from "~/components/LabelPicker";
 import { DemoBanner } from "~/components/list/DemoBanner";
+import { TIMED_COPY, TimeMenuItems } from "~/components/StateMenus";
 import { ROW_HEIGHT, ThreadRow } from "~/components/list/ThreadRow";
 import { useRowMenu } from "~/components/sidebar/EntityMenus";
 import { Button } from "~/components/ui/button";
@@ -49,14 +58,25 @@ import { formatCount } from "~/lib/format";
 import { splitDraftBody } from "~/lib/plainText";
 import { cn, plural, safeStorage } from "~/lib/utils";
 import { errorMessage } from "~/rpc/client";
-import { archiveOrInbox, isSettled, runThreadCommand, spamOrNot, toggleRead, toggleSettle, toggleStar, trashOrRestore } from "~/state/commands";
+import {
+  archiveOrInbox,
+  runThreadCommand,
+  runTimedCommand,
+  spamOrNot,
+  threadState,
+  toggleRead,
+  toggleSettle,
+  toggleStar,
+  trashOrRestore,
+  type ThreadState,
+} from "~/state/commands";
 import { listNav } from "~/state/listNav";
 import { openConversation } from "~/state/openConversation";
-import { useBootstrap, useDirectory, useDrafts, useSearchFacets, useThreads } from "~/state/queries";
+import { useBootstrap, useDirectory, useDrafts, useSearchFacets, useThreads, useThreadStates } from "~/state/queries";
 import { currentRoute, navigateBackTo, viewKey, type ViewRef } from "~/state/router";
 import { useUi, type InboxTabId, type ListFilter } from "~/state/ui";
 import { goScope } from "~/state/scope";
-import { describeView, inboxTabQuery, inScope, listQuery, searchWidens, splitsSettled } from "~/state/view";
+import { describeView, FILTER_QUERY, inboxTabQuery, inScope, listQuery, searchWidens, splitsSettled } from "~/state/view";
 
 const FILTERS: { id: ListFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -75,8 +95,31 @@ const INBOX_TABS: Record<InboxTabId, { label: string; icon: LucideIcon }> = {
 
 const EXAMPLES = ["from:anna has:attachment", "is:unread newer_than:7d"];
 
-/** The Settled section is open (remembered, as T3 Code remembers its shelf). */
-const SETTLED_OPEN_KEY = "fancy-mail:list:settled-open";
+/** Which sections are open (remembered, as T3 Code remembers its shelves). */
+const SHELVES_OPEN_KEY = "fancy-mail:list:shelves-open";
+/** A section header's height (they stack at the foot of the pane). */
+const SHELF_HEADER_HEIGHT = 36;
+
+type ShelfKey = "waiting" | "snoozed" | "settled";
+const SHELVES: { key: ShelfKey; label: string }[] = [
+  { key: "waiting", label: "Waiting" },
+  { key: "snoozed", label: "Snoozed" },
+  { key: "settled", label: "Settled" },
+];
+
+/** A section's count, and its conversations while it's open. */
+function useShelf(query: string | null, open: boolean) {
+  const facets = useSearchFacets(query ?? "");
+  const list = useThreads(query && open ? query : null);
+  const threads = useMemo(() => (query && open ? (list.data?.pages.flatMap((p) => p.threads) ?? []) : []), [query, open, list.data]);
+  return {
+    total: query ? (facets.data?.total ?? 0) : 0,
+    threads,
+    hasNextPage: !!(query && open && list.hasNextPage),
+    isFetchingNextPage: list.isFetchingNextPage,
+    fetchNextPage: list.fetchNextPage,
+  };
+}
 
 /** How long rows that arrive after a change keep their entrance (rows scrolled into view later don't). */
 const ENTER_WINDOW_MS = 450;
@@ -129,25 +172,40 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
   const tab: InboxTabId = hasTabs && (storedTab === "primary" || shownTabs.includes(storedTab)) ? storedTab : "primary";
   const showTabs = hasTabs && !rawSearch.trim();
   const viewListQuery = listQuery(view, info, search, filter, hasTabs ? inboxTabQuery(tab, shownTabs) : "");
-  const split = dir.settledLabelId !== null && viewListQuery !== null && splitsSettled(view, rawSearch);
-  const query = split ? `${viewListQuery} is:unsettled` : viewListQuery;
-  const settledSectionQuery = split ? `${viewListQuery} is:settled` : null;
-  const threadsQuery = useThreads(query);
-  const [settledOpen, setSettledOpen] = useState(() => safeStorage.get(SETTLED_OPEN_KEY, false));
-  const toggleSettled = () => {
-    setSettledOpen((open) => {
-      safeStorage.set(SETTLED_OPEN_KEY, !open);
-      return !open;
-    });
+  const stateIds = dir.stateLabelIds;
+  const split = viewListQuery !== null && Object.keys(stateIds).length > 0 && splitsSettled(view, rawSearch);
+  // In the inbox, Waiting and Snoozed hold all of this scope's (a message you sent and wait on
+  // isn't in the inbox); elsewhere, the view's own.
+  const awayBase = view.kind === "inbox" ? [scopeQuery(info.scope), FILTER_QUERY[filter]].filter(Boolean).join(" ") : viewListQuery;
+  const query = split ? `${viewListQuery} -is:pinned -is:settled -is:waiting -is:snoozed` : viewListQuery;
+  const pinnedQuery = split && stateIds.pinned ? `${viewListQuery} is:pinned` : null;
+  const shelfQuery: Record<ShelfKey, string | null> = {
+    waiting: split && stateIds.waiting ? `${awayBase} is:waiting` : null,
+    snoozed: split && stateIds.snoozed ? `${awayBase} is:snoozed` : null,
+    settled: split && stateIds.settled ? `${viewListQuery} is:settled` : null,
   };
-  const settledCount = useSearchFacets(settledSectionQuery ?? "").data;
-  const settledTotal = settledSectionQuery ? (settledCount?.total ?? 0) : 0;
-  const settledThreadsQuery = useThreads(settledSectionQuery && settledOpen ? settledSectionQuery : null);
-  const settledThreads = useMemo(
-    () => (settledSectionQuery && settledOpen ? (settledThreadsQuery.data?.pages.flatMap((p) => p.threads) ?? []) : []),
-    [settledSectionQuery, settledOpen, settledThreadsQuery.data],
-  );
-  const showSettled = split && (settledTotal > 0 || settledThreads.length > 0);
+  const threadsQuery = useThreads(query);
+  const pinnedThreadsQuery = useThreads(pinnedQuery);
+  const pinnedThreads = useMemo(() => (pinnedQuery ? (pinnedThreadsQuery.data?.pages[0]?.threads ?? []) : []), [pinnedQuery, pinnedThreadsQuery.data]);
+  const [openShelves, setOpenShelves] = useState<Record<ShelfKey, boolean>>(() => ({
+    waiting: false,
+    snoozed: false,
+    settled: false,
+    ...safeStorage.get<Partial<Record<ShelfKey, boolean>>>(SHELVES_OPEN_KEY, {}),
+  }));
+  const toggleShelf = (key: ShelfKey) =>
+    setOpenShelves((open) => {
+      const next = { ...open, [key]: !open[key] };
+      safeStorage.set(SHELVES_OPEN_KEY, next);
+      return next;
+    });
+  const shelfData = {
+    waiting: useShelf(shelfQuery.waiting, openShelves.waiting),
+    snoozed: useShelf(shelfQuery.snoozed, openShelves.snoozed),
+    settled: useShelf(shelfQuery.settled, openShelves.settled),
+  };
+  const shelves = SHELVES.filter((shelf) => shelfData[shelf.key].total > 0 || shelfData[shelf.key].threads.length > 0);
+  const states = useThreadStates();
   const fetched = useMemo(() => threadsQuery.data?.pages.flatMap((p) => p.threads) ?? [], [threadsQuery.data]);
   const firstPage = threadsQuery.data?.pages[0];
   const total = firstPage?.total ?? 0;
@@ -180,55 +238,42 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
   }, [settledQuery]);
   const animateRows = entering !== null && performance.now() < entering.until;
 
-  // ── Virtual rows: the conversations, then the Settled section's own list below its header ──
+  // ── Virtual rows: pinned on top, the active conversations, then the sections' own lists ──
   const scrollRef = useRef<HTMLDivElement>(null);
-  const settledListRef = useRef<HTMLDivElement>(null);
   const rowHeight = ROW_HEIGHT[density];
-  const settledId = dir.settledLabelId;
-  const caughtUp = showSettled && threads.length === 0 && !threadsQuery.hasNextPage;
+  const caughtUp = split && shelves.length > 0 && threads.length === 0 && pinnedThreads.length === 0 && !threadsQuery.hasNextPage;
+  // The active list starts below the pinned rows.
+  const activeListRef = useRef<HTMLDivElement>(null);
+  const [activeTop, setActiveTop] = useState(0);
+  useLayoutEffect(() => {
+    const top = activeListRef.current?.offsetTop ?? 0;
+    if (top !== activeTop) setActiveTop(top);
+  });
   const virtualizer = useVirtualizer({
     count: threads.length + (threadsQuery.hasNextPage ? 1 : 0),
     getScrollElement: () => scrollRef.current,
     estimateSize: () => rowHeight,
     overscan: 12,
+    scrollMargin: activeTop,
     getItemKey: (index) => threads[index]?.id ?? "loader-active",
-  });
-  // Where the settled rows start in the scroll area (they move as the list above grows).
-  const [settledTop, setSettledTop] = useState(0);
-  useLayoutEffect(() => {
-    const top = settledListRef.current?.offsetTop ?? 0;
-    if (top !== settledTop) setSettledTop(top);
-  });
-  const settledVirtualizer = useVirtualizer({
-    count: settledOpen ? settledThreads.length + (settledThreadsQuery.hasNextPage ? 1 : 0) : 0,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => rowHeight,
-    overscan: 12,
-    scrollMargin: settledTop,
-    getItemKey: (index) => settledThreads[index]?.id ?? "loader-settled",
   });
   useEffect(() => {
     virtualizer.measure();
-    settledVirtualizer.measure();
-  }, [rowHeight, virtualizer, settledVirtualizer]);
+  }, [rowHeight, virtualizer]);
 
   const items = virtualizer.getVirtualItems();
-  const settledItems = settledVirtualizer.getVirtualItems();
   const lastIndex = items[items.length - 1]?.index ?? 0;
-  const lastSettledIndex = settledItems[settledItems.length - 1]?.index ?? -1;
   useEffect(() => {
     if (lastIndex >= threads.length - 15 && threadsQuery.hasNextPage && !threadsQuery.isFetchingNextPage) {
       void threadsQuery.fetchNextPage();
     }
   }, [lastIndex, threads.length, threadsQuery]);
-  useEffect(() => {
-    if (lastSettledIndex >= settledThreads.length - 15 && settledThreadsQuery.hasNextPage && !settledThreadsQuery.isFetchingNextPage) {
-      void settledThreadsQuery.fetchNextPage();
-    }
-  }, [lastSettledIndex, settledThreads.length, settledThreadsQuery]);
 
   // What the keyboard walks through: the conversations shown, in order.
-  const shownThreads = useMemo(() => (settledOpen ? [...threads, ...settledThreads] : threads), [threads, settledThreads, settledOpen]);
+  const shownThreads = useMemo(
+    () => [...pinnedThreads, ...threads, ...SHELVES.flatMap((shelf) => (openShelves[shelf.key] ? shelfData[shelf.key].threads : []))],
+    [pinnedThreads, threads, openShelves, shelfData.waiting.threads, shelfData.snoozed.threads, shelfData.settled.threads],
+  );
 
   // Back to the top when other rows arrive.
   useEffect(() => {
@@ -240,10 +285,16 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
   }, [shownThreads]);
   useEffect(() => {
     listNav.scrollToIndex = (index) => {
-      if (index < threads.length) virtualizer.scrollToIndex(index, { align: "auto" });
-      else settledVirtualizer.scrollToIndex(index - threads.length, { align: "auto" });
+      const inActive = index - pinnedThreads.length;
+      if (inActive >= 0 && inActive < threads.length) {
+        virtualizer.scrollToIndex(inActive, { align: "auto" });
+        return;
+      }
+      // Pinned rows, and sections' rows (rendered around what's shown).
+      const id = shownThreads[index]?.id;
+      if (id) scrollRef.current?.querySelector(`[data-thread-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" });
     };
-  }, [virtualizer, settledVirtualizer, threads.length]);
+  }, [virtualizer, pinnedThreads.length, threads.length, shownThreads]);
 
   // ── Clicks ──
   const selectionSet = useMemo(() => new Set(selection), [selection]);
@@ -333,9 +384,10 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
 
   const hideLabelId = view.kind === "label" ? view.labelId : null;
   const isPending = threadsQuery.isPending && query !== null;
-  const showEmpty = !isPending && !threadsQuery.isError && threads.length === 0 && !showSettled;
-  const settleableHere = view.kind !== "trash" && view.kind !== "spam";
-  const renderRow = (thread: ThreadSummary, settled: boolean) => (
+  const showEmpty = !isPending && !threadsQuery.isError && threads.length === 0 && pinnedThreads.length === 0 && shelves.length === 0;
+  const actionableHere = view.kind !== "trash" && view.kind !== "spam";
+  const actionable = (thread: ThreadSummary) => actionableHere && thread.messageCount > 0 && !thread.inTrash && !thread.inSpam;
+  const renderRow = (thread: ThreadSummary) => (
     <ThreadRow
       thread={thread}
       dir={dir}
@@ -346,8 +398,10 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
       selectionMode={selectionMode}
       showAccount={info.spansAccounts}
       hideLabelId={hideLabelId}
-      settled={settled}
-      settleable={settleableHere && thread.messageCount > 0 && !thread.inTrash && !thread.inSpam}
+      state={threadState(thread, stateIds)}
+      timer={states.timers.get(thread.id) ?? null}
+      mark={states.marks.get(thread.id) ?? null}
+      actionable={actionable(thread)}
       onRowClick={onRowClick}
       onToggleCheck={toggleCheck}
       onContextMenu={onContextMenu}
@@ -510,7 +564,13 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
           )
         ) : (
           <div className="flex min-h-full flex-col">
+            {pinnedThreads.map((thread) => (
+              <div key={thread.id} className="shrink-0" style={{ height: rowHeight }}>
+                {renderRow(thread)}
+              </div>
+            ))}
             <div
+              ref={activeListRef}
               key={entering?.key ?? lastSettled.current ?? "rows"}
               className="shrink-0"
               style={{ height: virtualizer.getTotalSize(), position: "relative" }}
@@ -521,14 +581,14 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
                 return (
                   <div
                     key={item.key}
-                    style={{ position: "absolute", top: 0, left: 0, width: "100%", height: rowHeight, transform: `translateY(${item.start}px)` }}
+                    style={{ position: "absolute", top: 0, left: 0, width: "100%", height: rowHeight, transform: `translateY(${item.start - activeTop}px)` }}
                   >
                     {thread ? (
                       <div
                         className={cn("h-full", animateRows && "animate-enter")}
                         style={animateRows ? { animationDelay: `${Math.min(position, 14) * 14}ms` } : undefined}
                       >
-                        {renderRow(thread, isSettled(thread, settledId))}
+                        {renderRow(thread)}
                       </div>
                     ) : (
                       <RowSkeleton density={density} />
@@ -543,43 +603,22 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
                 <span className="font-medium text-sm">All caught up</span>
               </div>
             ) : null}
-            {showSettled ? (
-              <>
-                {/* Stays at the foot of the pane until the list reaches it, then scrolls with it. */}
-                <div
-                  data-section="settled"
-                  className="sticky bottom-0 z-10 mt-auto shrink-0 bg-background px-1.5 py-1 before:pointer-events-none before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-gradient-to-t before:from-background before:to-transparent"
-                >
-                  <CollapsibleSectionHeader
-                    expanded={settledOpen}
-                    onClick={toggleSettled}
-                    accessory={<span className="font-normal tabular-nums">{formatCount(settledTotal)}</span>}
-                  >
-                    Settled
-                  </CollapsibleSectionHeader>
-                </div>
-                <div ref={settledListRef} className="shrink-0" style={{ height: settledVirtualizer.getTotalSize(), position: "relative" }}>
-                  {settledItems.map((item) => {
-                    const thread = settledThreads[item.index];
-                    return (
-                      <div
-                        key={item.key}
-                        style={{
-                          position: "absolute",
-                          top: 0,
-                          left: 0,
-                          width: "100%",
-                          height: rowHeight,
-                          transform: `translateY(${item.start - settledVirtualizer.options.scrollMargin}px)`,
-                        }}
-                      >
-                        {thread ? renderRow(thread, true) : <RowSkeleton density={density} />}
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            ) : null}
+            {shelves.map((shelf, index) => (
+              <Shelf
+                key={shelf.key}
+                shelfKey={shelf.key}
+                label={shelf.label}
+                first={index === 0}
+                stickyBottom={(shelves.length - 1 - index) * SHELF_HEADER_HEIGHT}
+                open={openShelves[shelf.key]}
+                onToggle={() => toggleShelf(shelf.key)}
+                data={shelfData[shelf.key]}
+                scrollRef={scrollRef}
+                rowHeight={rowHeight}
+                density={density}
+                renderRow={renderRow}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -590,13 +629,99 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
             <RowMenuItems
               thread={menuThread}
               targets={menuTargets}
-              settled={isSettled(menuThread, settledId)}
-              settleable={settleableHere && menuThread.messageCount > 0 && !menuThread.inTrash && !menuThread.inSpam}
+              state={threadState(menuThread, stateIds)}
+              actionable={actionable(menuThread)}
             />
           ) : null}
         </MenuPopup>
       </Menu>
     </section>
+  );
+}
+
+/**
+ * One section at the foot of the list (Waiting, Snoozed, Settled): its header sticks to the
+ * bottom of the pane (stacked with the others) until the list reaches it; opened, its
+ * conversations follow in a virtual list of their own.
+ */
+function Shelf({
+  shelfKey,
+  label,
+  first,
+  stickyBottom,
+  open,
+  onToggle,
+  data,
+  scrollRef,
+  rowHeight,
+  density,
+  renderRow,
+}: {
+  shelfKey: ShelfKey;
+  label: string;
+  first: boolean;
+  stickyBottom: number;
+  open: boolean;
+  onToggle(): void;
+  data: ReturnType<typeof useShelf>;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+  rowHeight: number;
+  density: "comfortable" | "compact";
+  renderRow(thread: ThreadSummary): React.ReactNode;
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [top, setTop] = useState(0);
+  useLayoutEffect(() => {
+    const at = listRef.current?.offsetTop ?? 0;
+    if (at !== top) setTop(at);
+  });
+  const { threads, hasNextPage, isFetchingNextPage, fetchNextPage } = data;
+  const virtualizer = useVirtualizer({
+    count: open ? threads.length + (hasNextPage ? 1 : 0) : 0,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => rowHeight,
+    overscan: 12,
+    scrollMargin: top,
+    getItemKey: (index) => threads[index]?.id ?? "loader",
+  });
+  useEffect(() => {
+    virtualizer.measure();
+  }, [rowHeight, virtualizer]);
+  const items = virtualizer.getVirtualItems();
+  const last = items[items.length - 1]?.index ?? -1;
+  useEffect(() => {
+    if (last >= threads.length - 15 && hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [last, threads.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
+  return (
+    <>
+      <div
+        data-section={shelfKey}
+        className={cn(
+          "sticky z-10 flex shrink-0 items-center bg-background px-1.5",
+          // The first one keeps the group at the foot of a short list, with a fade above it.
+          first &&
+            "mt-auto before:pointer-events-none before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-gradient-to-t before:from-background before:to-transparent",
+        )}
+        style={{ bottom: stickyBottom, height: SHELF_HEADER_HEIGHT }}
+      >
+        <CollapsibleSectionHeader expanded={open} onClick={onToggle} accessory={<span className="font-normal tabular-nums">{formatCount(data.total)}</span>}>
+          {label}
+        </CollapsibleSectionHeader>
+      </div>
+      <div ref={listRef} className="shrink-0" style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+        {items.map((item) => {
+          const thread = threads[item.index];
+          return (
+            <div
+              key={item.key}
+              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: rowHeight, transform: `translateY(${item.start - top}px)` }}
+            >
+              {thread ? renderRow(thread) : <RowSkeleton density={density} />}
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
@@ -675,14 +800,15 @@ function Welcome() {
 function RowMenuItems({
   thread,
   targets,
-  settled,
-  settleable,
+  state,
+  actionable,
 }: {
   thread: ThreadSummary;
   targets: string[];
-  settled: boolean;
-  settleable: boolean;
+  state: ThreadState;
+  actionable: boolean;
 }) {
+  const settled = state === "settled";
   const many = targets.length > 1;
   const unread = thread.unreadCount > 0;
   return (
@@ -693,11 +819,51 @@ function RowMenuItems({
           Open
         </MenuItem>
       ) : null}
-      {settleable ? (
-        <MenuItem onClick={() => void runThreadCommand(settled ? "unsettle" : "settle", targets)}>
-          {settled ? <Undo2Icon /> : <CircleCheckIcon />}
-          {settled ? "Un-settle" : many ? `Settle ${targets.length}` : "Settle"}
-        </MenuItem>
+      {actionable ? (
+        <>
+          <MenuSeparator />
+          <MenuItem onClick={() => void runThreadCommand(settled ? "unsettle" : "settle", targets)}>
+            {settled ? <Undo2Icon /> : <CircleCheckIcon />}
+            {settled ? "Un-settle" : many ? `Settle ${targets.length}` : "Settle"}
+          </MenuItem>
+          {state === "waiting" ? (
+            <MenuItem onClick={() => void runThreadCommand("unwait", targets)}>
+              <TimerOffIcon />
+              Stop waiting
+            </MenuItem>
+          ) : (
+            <MenuSub>
+              <MenuSubTrigger>
+                <HourglassIcon />
+                Wait for an answer
+              </MenuSubTrigger>
+              <MenuSubPopup className="w-60">
+                <TimeMenuItems kind="wait" onPick={(until) => void runTimedCommand("wait", targets, until)} />
+              </MenuSubPopup>
+            </MenuSub>
+          )}
+          {state === "snoozed" ? (
+            <MenuItem onClick={() => void runThreadCommand("unsnooze", targets)}>
+              <AlarmClockOffIcon />
+              Wake now
+            </MenuItem>
+          ) : (
+            <MenuSub>
+              <MenuSubTrigger>
+                <AlarmClockIcon />
+                {TIMED_COPY.snooze.menuTitle}
+              </MenuSubTrigger>
+              <MenuSubPopup className="w-60">
+                <TimeMenuItems kind="snooze" onPick={(until) => void runTimedCommand("snooze", targets, until)} />
+              </MenuSubPopup>
+            </MenuSub>
+          )}
+          <MenuItem onClick={() => void runThreadCommand(state === "pinned" ? "unpin" : "pin", targets)}>
+            {state === "pinned" ? <PinOffIcon /> : <PinIcon />}
+            {state === "pinned" ? "Unpin" : "Pin to the top"}
+          </MenuItem>
+          <MenuSeparator />
+        </>
       ) : null}
       {thread.inTrash ? (
         <MenuItem onClick={() => void runThreadCommand("restore", targets)}>

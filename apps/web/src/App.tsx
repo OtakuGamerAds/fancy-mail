@@ -11,6 +11,7 @@ import { CommandPalette } from "~/components/CommandPalette";
 import { ComposePane } from "~/components/compose/ComposePane";
 import { ConnectionPill } from "~/components/ConnectionPill";
 import { ConfirmDialogs } from "~/components/dialogs/ConfirmDialogs";
+import { CustomTimeDialogHost } from "~/components/StateMenus";
 import { LabelPickerDialog } from "~/components/LabelPicker";
 import { ThreadList } from "~/components/list/ThreadList";
 import { Reader } from "~/components/reader/Reader";
@@ -129,6 +130,7 @@ function Shell() {
       <AddAccountDialog />
       <ShortcutsDialog />
       <ConfirmDialogs />
+      <CustomTimeDialogHost />
       <LabelPickerDialog />
       <ActivitySheet />
       <ConnectionPill />

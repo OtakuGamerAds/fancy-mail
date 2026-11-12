@@ -8,6 +8,7 @@ import { ForwardIcon, ReplyAllIcon, ReplyIcon, SendHorizontalIcon, Trash2Icon } 
 import { useEffect, useRef, useState } from "react";
 
 import { AccountAvatar, IconButton } from "~/components/common";
+import { SendAndWaitButton } from "~/components/StateMenus";
 import { QuietSelect } from "~/components/selects";
 import { Button } from "~/components/ui/button";
 import { Kbd } from "~/components/ui/kbd";
@@ -127,12 +128,12 @@ function ReplyComposer({
     setEditingRecipients(mode === "forward" || next.to.length === 0);
   };
 
-  const send = async () => {
+  const send = async (waitUntil?: number) => {
     if (invalidAddresses([...fields.to, ...fields.cc, ...fields.bcc]).length > 0) {
       setEditingRecipients(true);
       return;
     }
-    if (await editor.send()) {
+    if (await editor.send(waitUntil)) {
       editor.close();
       onClose();
     }
@@ -234,6 +235,7 @@ function ReplyComposer({
           <IconButton label="Discard draft" side="top" onClick={() => void discard()} className="rounded-full before:rounded-full">
             <Trash2Icon />
           </IconButton>
+          <SendAndWaitButton round disabled={editor.sending || editor.uploading.length > 0} onSend={(until) => void send(until)} />
           <Button
             size="sm"
             className="rounded-full ps-3 pe-2.5 before:rounded-full"

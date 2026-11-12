@@ -382,7 +382,8 @@ const SUMMARY = {
   markRead: "Marked {n} read", markUnread: "Marked {n} unread", star: "Starred {n}", unstar: "Unstarred {n}",
   archive: "Archived {n}", moveToInbox: "Moved {n} to the inbox", trash: "Moved {n} to the trash", restore: "Restored {n}",
   markSpam: "Marked {n} as spam", notSpam: "Marked {n} as not spam", addLabels: "Labeled {n} {label}", removeLabels: "Removed {label} from {n}",
-  settle: "Settled {n}", unsettle: "Un-settled {n}",
+  settle: "Settled {n}", unsettle: "Un-settled {n}", pin: "Pinned {n}", unpin: "Unpinned {n}",
+  wait: "Waiting on {n}", unwait: "Stopped waiting on {n}", snooze: "Snoozed {n}", unsnooze: "Woke {n}",
 };
 
 const snapshots = new Map();
@@ -442,6 +443,9 @@ const handlers = {
     return { thread, messages: msgs, drafts: drafts.filter((d) => d.threadId === threadId && d.sendState !== "sent") };
   },
   "threads.modify": (p) => modify(p),
+  // Where conversations stand: no waiting or snoozed ones in the mock.
+  "threads.states": () => ({ timers: [], marks: [] }),
+  "threads.clearMark": () => ({}),
   "threads.fetchBodies": () => ({}),
   "labels.create": ({ name, color }) => {
     const l = { id: id("l"), name, color: color ?? null, sortOrder: labels.length };

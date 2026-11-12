@@ -9,6 +9,7 @@ import { ArrowLeftIcon, SendHorizontalIcon, Trash2Icon, XIcon } from "lucide-rea
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AccountAvatar, IconButton } from "~/components/common";
+import { SendAndWaitButton } from "~/components/StateMenus";
 import { FieldSelect, type Choice } from "~/components/selects";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -162,13 +163,13 @@ function ComposeForm({ compose, draft, fullWidth }: { compose: ComposeState; dra
   const groupName = (id: string | null) => (id ? dir.groupById.get(id)?.name ?? "" : dir.groups.length > 0 ? "Ungrouped" : "");
   const choices = accountChoices(sendable, groupName);
 
-  const send = async () => {
+  const send = async (waitUntil?: number) => {
     const bad = invalidAddresses([...fields.to, ...fields.cc, ...fields.bcc]);
     if (bad.length > 0) {
       toast.error("Some addresses don't look right", bad.map((a) => a.address).join(", "));
       return;
     }
-    if (await editor.send()) {
+    if (await editor.send(waitUntil)) {
       editor.close();
       close();
     }
@@ -284,6 +285,10 @@ function ComposeForm({ compose, draft, fullWidth }: { compose: ComposeState; dra
                   <Trash2Icon />
                   Discard
                 </Button>
+                <SendAndWaitButton
+                  disabled={editor.sending || editor.uploading.length > 0 || !fields.accountId}
+                  onSend={(until) => void send(until)}
+                />
                 <Button size="sm" disabled={editor.sending || editor.uploading.length > 0 || !fields.accountId} onClick={() => void send()} title="Send (Ctrl+Enter)">
                   {editor.sending ? <Spinner size="sm" /> : <SendHorizontalIcon />}
                   Send

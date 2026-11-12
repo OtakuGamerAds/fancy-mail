@@ -9,7 +9,7 @@ import type { ViewKind } from "@fancy-mail/contracts";
 import { toast } from "~/components/ui/toast";
 import { isEditableTarget } from "~/lib/utils";
 import { undoLatest } from "~/state/actions";
-import { archiveOrInbox, runThreadCommand, targetThreadIds, toggleSettle, toggleStar } from "~/state/commands";
+import { archiveOrInbox, runThreadCommand, targetThreadIds, togglePin, toggleSettle, toggleStar } from "~/state/commands";
 import { indexOfThread, listNav } from "~/state/listNav";
 import { openConversation } from "~/state/openConversation";
 import { navigate, navigateBackTo } from "~/state/router";
@@ -39,6 +39,7 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: ["G", "T"], label: "Go to Trash", group: "Navigation" },
   { keys: ["G", "A"], label: "Go to All mail", group: "Navigation" },
   { keys: ["Ctrl", "Shift", "S"], label: "Settle or un-settle", group: "Conversations" },
+  { keys: ["Ctrl", "Shift", "P"], label: "Pin or unpin", group: "Conversations" },
   { keys: ["E"], label: "Archive", group: "Conversations" },
   { keys: ["Shift", "E"], label: "Move to inbox", group: "Conversations" },
   { keys: ["#"], label: "Trash (also Delete)", group: "Conversations" },
@@ -122,6 +123,10 @@ export function useKeyboard() {
         if (event.shiftKey && key.toLowerCase() === "s" && inMail) {
           event.preventDefault();
           toggleSettle(targetThreadIds());
+        }
+        if (event.shiftKey && key.toLowerCase() === "p" && inMail) {
+          event.preventDefault();
+          togglePin(targetThreadIds());
         }
         return;
       }

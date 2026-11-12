@@ -160,7 +160,8 @@ export function useDraftEditor(initial: DraftFields, options: { draftId?: string
     }
   }, [save]);
 
-  const send = useCallback(async (): Promise<boolean> => {
+  /** waitUntil: "Send and wait" — once sent, the conversation waits for an answer until then. */
+  const send = useCallback(async (waitUntil?: number): Promise<boolean> => {
     const current = fieldsRef.current;
     if (current.to.length + current.cc.length + current.bcc.length === 0) {
       toast.error("Add someone to send it to");
@@ -173,7 +174,7 @@ export function useDraftEditor(initial: DraftFields, options: { draftId?: string
       const draftId = idRef.current;
       if (!draftId) throw new Error("The draft could not be saved.");
       closedRef.current = true;
-      showSendToast(await rpc("drafts.send", { draftId, undoable: true }));
+      showSendToast(await rpc("drafts.send", { draftId, undoable: true, waitUntil: waitUntil ?? null }));
       void queryClient.invalidateQueries({ queryKey: qk.drafts });
       if (current.threadId) void queryClient.invalidateQueries({ queryKey: qk.thread(current.threadId) });
       return true;

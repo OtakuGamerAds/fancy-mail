@@ -4,7 +4,8 @@
  */
 import type { Draft } from "@fancy-mail/contracts";
 
-import { qk, queryClient } from "./queries";
+import { rpc } from "~/rpc/client";
+import { qk, queryClient, type ThreadStates } from "./queries";
 import { navigate } from "./router";
 import { useUi } from "./ui";
 
@@ -26,4 +27,8 @@ export function openConversation(threadId: string): void {
   }
   const route = ui.route;
   if (route.page === "mail") navigate({ ...route, threadId });
+  // Seen: "Replied", "No reply" or "Woke" on its row goes.
+  if (queryClient.getQueryData<ThreadStates>(qk.threadStates)?.marks.has(threadId)) {
+    void rpc("threads.clearMark", { threadId }).catch(() => {});
+  }
 }

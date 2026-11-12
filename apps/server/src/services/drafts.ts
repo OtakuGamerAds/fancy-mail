@@ -8,7 +8,7 @@ import { agentDisplayName, canSee, isAgent, requireAccess, visibleAccountIds } f
 import type { CallContext } from "./context.ts";
 import { invalidate, notifyOutbox, writeActivity } from "./env.ts";
 import type { ServiceEnv } from "./env.ts";
-import { unsettleThreads } from "./threads.ts";
+import { reopenThreads, waitQuietly } from "./threads.ts";
 
 export type DraftUndo = { type: "draftCreate"; draftId: string };
 
@@ -249,7 +249,7 @@ export function createDraftsService(env: ServiceEnv) {
       publish(draft.threadId);
     },
 
-    send(id: string, ctx: CallContext, options: { undoable?: boolean } = {}): Draft {
+    send(id: string, ctx: CallContext, options: { undoable?: boolean; waitUntil?: number | null } = {}): Draft {
       const { draft, account } = requireDraft(id, ctx);
       requireAccess(ctx, account, "send", "sending mail");
       if (draft.sendState === "queued" || draft.sendState === "sending") return out(draft);
@@ -263,6 +263,7 @@ export function createDraftsService(env: ServiceEnv) {
         }
       }
       store.drafts.setSendState(draft.id, "queued", null);
+      store.drafts.setWaitUntil(draft.id, options.waitUntil && options.waitUntil > env.now() ? options.waitUntil : null);
       const wait = options.undoable && !isAgent(ctx) ? store.settings.get().undoSendSeconds * 1000 : 0;
       if (wait > 0) {
         const timer = setTimeout(() => dispatch(draft.id, ctx), wait);
@@ -329,13 +330,17 @@ export function createDraftsService(env: ServiceEnv) {
     markSent(id: string, extraThreadIds: string[] = []): void {
       const draft = store.drafts.get(id);
       if (!draft) return;
+      const waitUntil = store.drafts.waitUntil(id);
       env.db.tx(() => {
         store.drafts.delete(id);
         store.refreshThreads([draft.threadId, ...extraThreadIds]);
       });
       invalidate(env, ["drafts", "threads", "mailboxes", "accounts"], [draft.threadId, ...extraThreadIds]);
-      // You wrote again: you're waiting for an answer, so it isn't settled.
-      unsettleThreads(env, [...new Set([draft.threadId, ...extraThreadIds])].filter((t) => store.threads.get(t) !== null));
+      // You wrote: it's active again (settled, waiting or snoozed before), or, with "Send and
+      // wait", waiting for the answer.
+      const threads = [...new Set([...extraThreadIds, draft.threadId])].filter((t) => store.threads.get(t) !== null);
+      reopenThreads(env, threads, { marks: false });
+      if (waitUntil && waitUntil > env.now()) waitQuietly(env, threads.slice(0, 1), waitUntil);
       env.bus.publish({ type: "draftSent", draftId: id, ok: true, error: null });
     },
 

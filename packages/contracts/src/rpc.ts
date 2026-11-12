@@ -24,7 +24,9 @@ import {
   Provider,
   ServerEndpoint,
   Settings,
+  ThreadMark,
   ThreadSummary,
+  ThreadTimer,
 } from "./domain.ts";
 
 // ── Changes applied to conversations ────────────────────────────────────────────────────────
@@ -46,6 +48,14 @@ export const ModifyAction = z.discriminatedUnion("type", [
   /** Done with it: the Settled label on every message, and read. Stays where it is. */
   z.object({ type: z.literal("settle") }),
   z.object({ type: z.literal("unsettle") }),
+  /** Waiting for an answer until then (ms); back with "No reply" after. */
+  z.object({ type: z.literal("wait"), until: z.number() }),
+  z.object({ type: z.literal("unwait") }),
+  /** Out of the way until then (ms). */
+  z.object({ type: z.literal("snooze"), until: z.number() }),
+  z.object({ type: z.literal("unsnooze") }),
+  z.object({ type: z.literal("pin") }),
+  z.object({ type: z.literal("unpin") }),
   z.object({ type: z.literal("addLabels"), labelIds: z.array(z.string()).min(1) }),
   z.object({ type: z.literal("removeLabels"), labelIds: z.array(z.string()).min(1) }),
 ]);
@@ -131,6 +141,13 @@ export const RPC_METHODS = {
     params: z.object({ query: z.string() }),
     result: SearchFacets,
   },
+  /** Waiting and snoozed conversations' times, and why some came back (shown on their rows). */
+  "threads.states": {
+    params: Empty,
+    result: z.object({ timers: z.array(ThreadTimer), marks: z.array(ThreadMark) }),
+  },
+  /** Seen: the conversation's "Replied" / "No reply" / "Woke" goes away. */
+  "threads.clearMark": { params: z.object({ threadId: z.string() }), result: Empty },
   "threads.get": {
     params: z.object({ threadId: z.string() }),
     result: ThreadDetail,
@@ -254,7 +271,11 @@ export const RPC_METHODS = {
   "drafts.delete": { params: z.object({ draftId: z.string() }), result: Empty },
   /** Queues the draft; a `draftSent` event says how it went. */
   /** `undoable`: wait the Undo send time first (Settings); agents always send at once. */
-  "drafts.send": { params: z.object({ draftId: z.string(), undoable: z.boolean().optional() }), result: Draft },
+  /** waitUntil: once sent, the conversation waits for an answer until then. */
+  "drafts.send": {
+    params: z.object({ draftId: z.string(), undoable: z.boolean().optional(), waitUntil: z.number().nullable().optional() }),
+    result: Draft,
+  },
   /** Stops a send that is still waiting; the message is a draft again. Fails once it went out. */
   "drafts.cancelSend": { params: z.object({ draftId: z.string() }), result: Draft },
   /** Sends a waiting message now instead of at the end of its wait. */

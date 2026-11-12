@@ -313,6 +313,29 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 5,
+    name: "waiting and snoozed conversations",
+    up: (db) => {
+      // The states are labels (Waiting, Snoozed…); these keep when they end and why a
+      // conversation came back. drafts.wait_until: "Send and wait" sets Waiting once it's sent.
+      db.exec(`
+        CREATE TABLE thread_timers (
+          thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL,
+          until INTEGER NOT NULL,
+          set_at INTEGER NOT NULL
+        );
+        CREATE INDEX thread_timers_until ON thread_timers(until);
+        CREATE TABLE thread_marks (
+          thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL,
+          at INTEGER NOT NULL
+        );
+        ALTER TABLE drafts ADD COLUMN wait_until INTEGER;
+      `);
+    },
+  },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

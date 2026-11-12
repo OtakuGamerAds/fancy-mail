@@ -4,8 +4,13 @@
  */
 import type { Message, ThreadDetail } from "@fancy-mail/contracts";
 import {
+  AlarmClockIcon,
+  AlarmClockOffIcon,
   ArchiveIcon,
   CheckIcon,
+  HourglassIcon,
+  PinIcon,
+  TimerOffIcon,
   ArchiveRestoreIcon,
   ArrowLeftIcon,
   LinkIcon,
@@ -27,15 +32,17 @@ import { ReplyArea } from "~/components/compose/ReplyComposer";
 import { LabelPickerPopover } from "~/components/LabelPicker";
 import { Button } from "~/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "~/components/ui/empty";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+import { Menu, MenuGroupLabel, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "~/components/ui/menu";
 import { Skeleton } from "~/components/ui/skeleton";
 import { toast } from "~/components/ui/toast";
 import { textDirection } from "~/lib/textDirection";
 import { cn, plural } from "~/lib/utils";
 import { errorMessage } from "~/rpc/client";
 import { modifyThreads } from "~/state/actions";
-import { isSettled, runThreadCommand, toggleStar } from "~/state/commands";
-import { useDirectory, useThread } from "~/state/queries";
+import { runThreadCommand, runTimedCommand, threadState, toggleStar } from "~/state/commands";
+import { TIMED_COPY, TimeMenuItems, type TimedKind } from "~/components/StateMenus";
+import { formatWhen } from "~/lib/stateTimes";
+import { useDirectory, useThread, useThreadStates } from "~/state/queries";
 import { formatRoute, type Route } from "~/state/router";
 import { useUi } from "~/state/ui";
 import { DraftCard } from "./DraftCard";
@@ -246,7 +253,32 @@ function Toolbar({ detail, onClose }: { detail: ThreadDetail; onClose(): void })
   const { thread } = detail;
   const ids = [thread.id];
   const unread = thread.unreadCount > 0;
-  const settled = isSettled(thread, useDirectory().settledLabelId);
+  const state = threadState(thread, useDirectory().stateLabelIds);
+  const settled = state === "settled";
+  const timer = useThreadStates().timers.get(thread.id);
+  const timedButton = (kind: TimedKind) => {
+    const on = kind === "wait" ? state === "waiting" : state === "snoozed";
+    if (on) {
+      const label = `${kind === "wait" ? "Stop waiting" : "Wake now"}${timer ? ` (until ${formatWhen(timer.until)})` : ""}`;
+      return (
+        <IconButton label={label} pressed onClick={() => void runThreadCommand(kind === "wait" ? "unwait" : "unsnooze", ids)}>
+          {kind === "wait" ? <TimerOffIcon /> : <AlarmClockOffIcon />}
+        </IconButton>
+      );
+    }
+    const label = kind === "wait" ? "Wait for an answer" : "Snooze";
+    return (
+      <Menu>
+        <MenuTrigger render={<Button variant="ghost-muted" size="icon-sm" aria-label={label} title={label} />}>
+          {kind === "wait" ? <HourglassIcon /> : <AlarmClockIcon />}
+        </MenuTrigger>
+        <MenuPopup align="start" className="w-60">
+          <MenuGroupLabel>{TIMED_COPY[kind].menuTitle}</MenuGroupLabel>
+          <TimeMenuItems kind={kind} onPick={(until) => void runTimedCommand(kind, ids, until)} />
+        </MenuPopup>
+      </Menu>
+    );
+  };
   return (
     <div className="flex shrink-0 items-center gap-0.5 pt-0.5">
       {!thread.inTrash && !thread.inSpam ? (
@@ -261,6 +293,12 @@ function Toolbar({ detail, onClose }: { detail: ThreadDetail; onClose(): void })
           {settled ? <Undo2Icon /> : <CheckIcon />}
           {settled ? "Un-settle" : "Settle"}
         </Button>
+      ) : null}
+      {!thread.inTrash && !thread.inSpam ? (
+        <>
+          {timedButton("wait")}
+          {timedButton("snooze")}
+        </>
       ) : null}
       {thread.inInbox ? (
         <IconButton label="Archive" shortcut="E" onClick={() => void runThreadCommand("archive", ids)}>
@@ -312,6 +350,13 @@ function Toolbar({ detail, onClose }: { detail: ThreadDetail; onClose(): void })
           <MoreHorizontalIcon />
         </MenuTrigger>
         <MenuPopup align="end" className="w-56">
+          {!thread.inTrash && !thread.inSpam ? (
+            <MenuItem onClick={() => void runThreadCommand(state === "pinned" ? "unpin" : "pin", ids)}>
+              <PinIcon />
+              {state === "pinned" ? "Unpin" : "Pin to the top"}
+              <MenuShortcut>Ctrl+Shift+P</MenuShortcut>
+            </MenuItem>
+          ) : null}
           <MenuItem
             onClick={() => {
               const route = useUi.getState().route;

@@ -1,5 +1,5 @@
 import { parseQuery } from "@fancy-mail/contracts";
-import type { Activity, ModifyAction, SearchFacets, SearchResult, ThreadDetail } from "@fancy-mail/contracts";
+import type { Activity, ModifyAction, SearchFacets, SearchResult, ThreadDetail, ThreadMark, ThreadTimer } from "@fancy-mail/contracts";
 
 import type { SqlValue } from "../db/sqlite.ts";
 import { AppError } from "../errors.ts";
@@ -15,7 +15,7 @@ import type { CallContext } from "./context.ts";
 import { invalidate, notifyOutbox, writeActivity } from "./env.ts";
 import type { ServiceEnv } from "./env.ts";
 import { applyDeltas, invertDelta, locationsOf, outboxOpsFor, planAction, summarize } from "./mutate.ts";
-import { ensureSettledLabel } from "./settled.ts";
+import { ACTION_STATE, ensureStateLabel, stateLabelIds } from "./settled.ts";
 import type { MessageDelta } from "./mutate.ts";
 
 const DEFAULT_LIMIT = 50;
@@ -83,13 +83,82 @@ export function applyChange(
 }
 
 /**
- * New mail in a settled conversation (a reply, or one you sent): it isn't settled any more. No
- * Activity entry (nobody did it); the label also comes off on the server.
+ * New mail in a settled, waiting or snoozed conversation (a reply, or one you sent): it's active
+ * again. With `marks`, the row says why (an answer came while waiting: "Replied"; a snooze
+ * ended early: "Woke"). No Activity entry (nobody did it); the labels also come off on the
+ * server. Returns the conversations that changed.
  */
-export function unsettleThreads(env: ServiceEnv, threadIds: string[]): string[] {
+export function reopenThreads(env: ServiceEnv, threadIds: string[], options: { marks: boolean }): string[] {
   if (threadIds.length === 0) return [];
-  return applyChange(env, [{ action: "unsettle", plan: () => planAction({ store: env.store, now: env.now }, threadIds, { type: "unsettle" }).deltas }])
-    .threadIds;
+  const { store } = env;
+  const ids = stateLabelIds(store);
+  const labels = store.threads.labelIds(threadIds);
+  const has = (threadId: string, id: string | undefined) => !!id && (labels.get(threadId) ?? []).includes(id);
+  const open = threadIds.filter((t) => has(t, ids.settled) || has(t, ids.waiting) || has(t, ids.snoozed));
+  if (open.length === 0) return [];
+  const mutateEnv = { store, now: env.now };
+  const change = env.db.tx(() => {
+    if (options.marks) {
+      for (const threadId of open) {
+        const kind = has(threadId, ids.waiting) ? "replied" : has(threadId, ids.snoozed) ? "woke" : null;
+        if (kind) store.threadStates.setMark({ threadId, kind, at: env.now() });
+      }
+    }
+    store.threadStates.clearTimers(open);
+    // An answer while waiting or snoozed: back in the inbox too (a message you sent isn't).
+    const back = options.marks ? open.filter((t) => has(t, ids.waiting) || has(t, ids.snoozed)) : [];
+    return applyChange(env, [
+      ...(["unsettle", "unwait", "unsnooze"] as const).map((type) => ({ action: type, plan: () => planAction(mutateEnv, open, { type }).deltas })),
+      { action: "moveToInbox", plan: () => planAction(mutateEnv, back, { type: "moveToInbox" }).deltas },
+    ]);
+  });
+  return change.threadIds;
+}
+
+/**
+ * Waiting and snoozed conversations whose time is up come back: "No reply" for a wait that ran
+ * out, "Woke" for a snooze. Returns the conversations that came back.
+ */
+export function wakeDueThreads(env: ServiceEnv): string[] {
+  const { store } = env;
+  const now = env.now();
+  const due = store.threadStates.due(now);
+  if (due.length === 0) return [];
+  const ids = stateLabelIds(store);
+  const labels = store.threads.labelIds(due.map((t) => t.threadId));
+  const mutateEnv = { store, now: env.now };
+  const woken: string[] = [];
+  const change = env.db.tx(() => {
+    for (const timer of due) {
+      const labelId = timer.kind === "waiting" ? ids.waiting : ids.snoozed;
+      // Undone or changed meanwhile: the label is gone, so only the timer goes.
+      if (labelId && (labels.get(timer.threadId) ?? []).includes(labelId)) {
+        woken.push(timer.threadId);
+        store.threadStates.setMark({ threadId: timer.threadId, kind: timer.kind === "waiting" ? "noReply" : "woke", at: now });
+      }
+    }
+    store.threadStates.clearTimers(due.map((t) => t.threadId));
+    if (woken.length === 0) return null;
+    // Back where you look: the inbox (a message you sent and waited on isn't in it).
+    return applyChange(
+      env,
+      (["unwait", "unsnooze", "moveToInbox"] as const).map((type) => ({ action: type, plan: () => planAction(mutateEnv, woken, { type }).deltas })),
+    );
+  });
+  return change?.threadIds ?? [];
+}
+
+/** "Send and wait": once the message is out, its conversation waits for an answer until then. */
+export function waitQuietly(env: ServiceEnv, threadIds: string[], until: number): void {
+  if (threadIds.length === 0) return;
+  const mutateEnv = { store: env.store, now: env.now };
+  env.db.tx(() => {
+    ensureStateLabel(env.store, "waiting", env.now());
+    for (const threadId of threadIds) env.store.threadStates.setTimer({ threadId, kind: "waiting", until, setAt: env.now() });
+    env.store.threadStates.clearMarks(threadIds);
+    applyChange(env, [{ action: "wait", plan: () => planAction(mutateEnv, threadIds, { type: "wait", until }).deltas }]);
+  });
+  invalidate(env, ["labels"]);
 }
 
 /** Applies a stored undo (or any list of delta steps) as-is. */
@@ -289,11 +358,30 @@ export function createThreadsService(env: ServiceEnv) {
       }
 
       const mutateEnv = { store, now: env.now };
+      for (const action of actions) {
+        if ((action.type === "wait" || action.type === "snooze") && !(action.until > env.now())) {
+          throw new AppError("bad_request", `${action.type === "wait" ? "Waiting" : "Snoozing"} needs a time in the future.`);
+        }
+      }
       let labelCreated = false;
       const createdMailboxes: { accountId: string; mailbox: { id: string; path: string; role: string | null } }[] = [];
       let activity: Activity | null = null;
       const result = env.db.tx(() => {
-        if (actions.some((a) => a.type === "settle")) labelCreated = ensureSettledLabel(store, env.now()).created;
+        // The state labels an action adds exist from its first use.
+        for (const action of actions) {
+          const key = ACTION_STATE[action.type];
+          if (key) labelCreated = ensureStateLabel(store, key, env.now()).created || labelCreated;
+        }
+        // When waiting and snoozed conversations come back, and the "Replied"/"No reply" marks
+        // (handled now) go.
+        for (const action of actions) {
+          if (action.type === "wait" || action.type === "snooze") {
+            for (const threadId of unique) store.threadStates.setTimer({ threadId, kind: action.type === "wait" ? "waiting" : "snoozed", until: action.until, setAt: env.now() });
+          } else if (["settle", "pin", "unwait", "unsnooze"].includes(action.type)) {
+            store.threadStates.clearTimers(unique);
+          }
+          if (ACTION_STATE[action.type] || action.type.startsWith("un")) store.threadStates.clearMarks(unique);
+        }
         const change = applyChange(
           env,
           actions.map((action) => ({
@@ -334,9 +422,30 @@ export function createThreadsService(env: ServiceEnv) {
       return { activity };
     },
 
-    /** Sync engine: these got new mail, so they aren't settled any more. */
-    unsettle(threadIds: string[]): string[] {
-      return unsettleThreads(env, threadIds);
+    /** Sync engine: these got new mail, so they're active again (and say why). */
+    reopen(threadIds: string[]): string[] {
+      return reopenThreads(env, threadIds, { marks: true });
+    },
+
+    /** Waiting and snoozed conversations whose time is up come back (a timer calls this). */
+    wakeDue(): string[] {
+      return wakeDueThreads(env);
+    },
+
+    /** When waiting and snoozed conversations come back, and why some came back. */
+    states(ctx: CallContext): { timers: ThreadTimer[]; marks: ThreadMark[] } {
+      const visible = visibleAccountIds(ctx, store.accounts.list());
+      const timers = store.threadStates.timers();
+      const marks = store.threadStates.marks();
+      if (!visible) return { timers, marks };
+      const ok = new Set(store.threads.byIds([...new Set([...timers, ...marks].map((t) => t.threadId))]).filter((r) => visible.includes(r.account_id)).map((r) => r.id));
+      return { timers: timers.filter((t) => ok.has(t.threadId)), marks: marks.filter((m) => ok.has(m.threadId)) };
+    },
+
+    /** The conversation was opened: its "Replied" / "No reply" / "Woke" goes. */
+    clearMark(threadId: string, ctx: CallContext): void {
+      visibleThread(threadId, ctx);
+      if (store.threadStates.clearMark(threadId)) invalidate(env, ["threads"], [threadId]);
     },
 
     /** Re-derives cached thread rows (sync engine and tests). */

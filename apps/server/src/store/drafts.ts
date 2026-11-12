@@ -128,6 +128,13 @@ export function createDraftsStore(db: Db) {
     setSendState(id: string, state: DraftSendState, error: string | null = null): void {
       db.run("UPDATE drafts SET send_state = ?, send_error = ? WHERE id = ?", state, error, id);
     },
+    /** "Send and wait": how long the conversation waits for an answer once this is sent. */
+    setWaitUntil(id: string, until: number | null): void {
+      db.run("UPDATE drafts SET wait_until = ? WHERE id = ?", until, id);
+    },
+    waitUntil(id: string): number | null {
+      return db.value<number | null>("SELECT wait_until FROM drafts WHERE id = ?", id) ?? null;
+    },
 
     setRemote(id: string, remoteUid: number | null, remoteMailboxId: string | null): void {
       db.run("UPDATE drafts SET remote_uid = ?, remote_mailbox_id = ? WHERE id = ?", remoteUid, remoteMailboxId, id);
