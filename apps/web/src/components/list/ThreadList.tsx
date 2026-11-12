@@ -513,14 +513,14 @@ function InboxTabButton({ id, active, unreadQuery }: { id: InboxTabId; active: b
       title={unread > 0 ? `${label}: ${plural(unread, "unread conversation")}` : label}
       onClick={() => useUi.getState().setInboxTab(id)}
       className={cn(
-        "relative flex h-9 min-w-0 max-w-44 flex-1 basis-0 cursor-pointer items-center gap-1.5 rounded-t-md px-2 text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+        "relative flex h-9 min-w-0 shrink cursor-pointer items-center gap-1.5 rounded-t-md px-2.5 text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         active ? "font-medium text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
     >
       <Icon className={cn("size-4 shrink-0", active && "text-primary")} />
       <span className="min-w-0 truncate">{label}</span>
       {unread > 0 && !active ? (
-        <span className="ms-auto shrink-0 rounded-full bg-primary/15 px-1.5 font-medium text-[11px] text-foreground/85 tabular-nums">
+        <span className="shrink-0 rounded-full bg-primary/15 px-1.5 font-medium text-[11px] text-foreground/85 tabular-nums">
           {unread >= 1000 ? "999+" : formatCount(unread)}
         </span>
       ) : null}

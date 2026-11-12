@@ -23,10 +23,10 @@ export async function removeDemoMail() {
 export function DemoBanner() {
   const [busy, setBusy] = useState(false);
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-0.5 border-border border-b bg-info/[0.06] px-3 py-1.5 text-muted-foreground text-xs">
+    <div className="flex shrink-0 items-center gap-3 border-border border-b bg-info/[0.06] px-3 py-1.5 text-muted-foreground text-xs">
       <span className="flex min-w-0 items-center gap-1.5">
         <FlaskConicalIcon className="size-3.5 shrink-0 text-info-foreground" />
-        <span>This is demo mail, so you can look around.</span>
+        <span className="truncate" title="This is demo mail, so you can look around.">Demo mail to look around</span>
       </span>
       <span className="ms-auto flex shrink-0 items-center gap-1.5">
       <InlineButton className="text-xs" onClick={() => useUi.getState().openDialog({ type: "add-account" })}>

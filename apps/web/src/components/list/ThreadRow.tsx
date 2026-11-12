@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { memo, type MouseEvent as ReactMouseEvent } from "react";
 
-import { ColorDot, LabelChip } from "~/components/common";
+import { AccountAvatar, LabelChip } from "~/components/common";
 import { CheckboxMark } from "~/components/ui/checkbox";
 import { displayName } from "~/lib/addresses";
 import { formatExact, formatListDate } from "~/lib/format";
@@ -178,8 +178,9 @@ export const ThreadRow = memo(function ThreadRow({
   const peopleEl = (
     <span className={cn("flex min-w-0 items-center gap-1.5", compact ? "w-[32%] min-w-24 max-w-48 shrink-0" : "flex-1")}>
       {showAccount && account ? (
+        // The account's avatar, as in the sidebar (a dot would read as the unread dot).
         <span title={account.email} className="flex shrink-0">
-          <ColorDot color={account.color} className="size-1.5" />
+          <AccountAvatar account={account} size={16} />
         </span>
       ) : null}
       <span className={cn("min-w-0 truncate", unread ? "font-semibold text-foreground" : "text-foreground/85")}>

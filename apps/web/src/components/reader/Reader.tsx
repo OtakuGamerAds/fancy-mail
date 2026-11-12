@@ -164,7 +164,7 @@ function ReaderContent({ detail, onClose, fullWidth }: { detail: ThreadDetail; o
         ) : null}
         <div className="min-w-0 flex-1 pt-1.5">
           <h1
-            className="app-no-drag line-clamp-2 cursor-text select-text font-semibold text-lg text-foreground leading-snug tracking-tight wrap-anywhere"
+            className="app-no-drag line-clamp-3 cursor-text select-text font-semibold text-lg text-foreground leading-snug tracking-tight wrap-anywhere"
             dir={textDirection(subject)}
             data-selectable
             title={subject}
