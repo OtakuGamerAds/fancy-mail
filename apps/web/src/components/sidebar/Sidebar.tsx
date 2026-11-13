@@ -37,7 +37,7 @@ import { cn } from "~/lib/utils";
 import { createGroup, createLabel, updateAccount, updateGroup, updateLabel } from "~/state/actions";
 import { useBootstrap, useDirectory, useDrafts } from "~/state/queries";
 import { navigate, viewKey, type ViewRef } from "~/state/router";
-import { goScope, MULTI_CLICK, pickScope, useScope } from "~/state/scope";
+import { goScope, MULTI_CLICK, pickLabel, pickScope, useScope } from "~/state/scope";
 import { scopeAccounts, scopeLabel } from "~/state/view";
 import { openAccountSettings } from "~/components/settings/AccountsSettings";
 import { SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN, useUi } from "~/state/ui";
@@ -687,7 +687,8 @@ function LabelsSection() {
 }
 
 function LabelRow({ label }: { label: Label }) {
-  const active = useActiveKey();
+  const route = useUi((s) => s.route);
+  const shown = route.page === "mail" && route.view.kind === "label" && route.view.labelIds.includes(label.id);
   const matches = useSearchMatches();
   const found = matches.label(label.id);
   const renaming = useUi((s) => s.renaming);
@@ -695,7 +696,7 @@ function LabelRow({ label }: { label: Label }) {
   const menu = useRowMenu();
   const dir = useDirectory();
   const scope = useScope();
-  const view: ViewRef = { kind: "label", labelId: label.id, scope };
+
   // Counted where the views look; a label with nothing there fades back.
   let unread = label.unreadThreadCount;
   let threads = label.threadCount;
@@ -707,7 +708,7 @@ function LabelRow({ label }: { label: Label }) {
       threads += label.byAccount[a.id]?.threads ?? 0;
     }
   }
-  const empty = scope.type !== "all" && threads === 0 && active !== viewKey(view);
+  const empty = scope.type !== "all" && threads === 0 && !shown;
   if (renaming?.kind === "label" && renaming.id === label.id) {
     return (
       <InlineNameField
@@ -725,7 +726,7 @@ function LabelRow({ label }: { label: Label }) {
   return (
     <>
       <SidebarRow
-        active={active === viewKey(view)}
+        active={shown}
         className={cn((matches.active ? found === 0 : empty) && NO_MATCHES)}
         leading={<ColorDot color={label.color} className="mx-1" />}
         label={label.name}
@@ -746,7 +747,11 @@ function LabelRow({ label }: { label: Label }) {
         }
         onContextMenu={menu.openAtPointer}
         onDoubleClick={() => setRenaming({ kind: "label", id: label.id })}
-        onActivate={() => go(view)}
+        onClick={(event) => {
+          event.preventDefault();
+          pickLabel(label.id, event);
+        }}
+        onActivate={() => pickLabel(label.id, { ctrlKey: false, metaKey: false })}
       />
       <LabelMenu label={label} menu={menu} />
     </>

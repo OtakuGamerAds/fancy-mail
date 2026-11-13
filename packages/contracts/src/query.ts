@@ -264,7 +264,7 @@ export const QUERY_SYNTAX_HELP = [
   "  settled: done with · waiting: waiting for an answer · snoozed: later · pinned: kept on top; new mail brings them back",
   "in:inbox in:sent in:drafts in:archive in:starred in:trash in:spam in:anywhere",
   "  (without in:, everything except trash and spam is searched)",
-  "label:Invoices label:none · account:me@gmail.com · group:Banking group:none",
+  "label:Invoices label:none · label:Invoices,Receipts (any of them) · account:me@gmail.com · group:Banking group:none",
   "  (several account: and group: terms mean any of them: group:Banking account:me@gmail.com)",
   "category:primary category:promotions category:social category:updates category:forums (Gmail's inbox tabs)",
   "after:2026-07-01 before:2026-10-01 · newer_than:7d older_than:1y (d days, w weeks, m months, y years) · larger:5M smaller:100K",

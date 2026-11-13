@@ -66,7 +66,10 @@ export function describeView(view: ViewRef, bootstrap: Bootstrap | undefined): V
   let chip: string | null = scopeLabel(scope, bootstrap);
   switch (view.kind) {
     case "label":
-      title = dir.labelById.get(view.labelId)?.name ?? "Label";
+      {
+        const names = view.labelIds.map((id) => dir.labelById.get(id)?.name ?? "Label");
+        title = names.length <= 2 ? names.join(" + ") : `${names[0]} + ${names.length - 1} more`;
+      }
       break;
     case "mailbox":
       title = bootstrap?.mailboxes.find((m) => m.id === view.mailboxId)?.name ?? "Folder";

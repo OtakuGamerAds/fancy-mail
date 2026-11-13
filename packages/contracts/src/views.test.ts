@@ -22,7 +22,8 @@ describe("scopes", () => {
       { type: "account", id: "a1" },
     ]);
     expect(scopeQuery(scope)).toBe("group:g1 group:g2 account:a1");
-    expect(viewQuery({ kind: "label", labelId: "l1", scope })).toBe("label:l1 group:g1 group:g2 account:a1");
+    expect(viewQuery({ kind: "label", labelIds: ["l1"], scope })).toBe("label:l1 group:g1 group:g2 account:a1");
+    expect(viewQuery({ kind: "label", labelIds: ["l1", "l2"], scope: { type: "all" } })).toBe("label:l1,l2");
   });
 
   it("compares sets whatever their order", () => {

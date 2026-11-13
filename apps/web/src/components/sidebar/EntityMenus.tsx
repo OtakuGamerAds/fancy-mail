@@ -34,7 +34,7 @@ import {
 } from "~/components/ui/menu";
 import { syncNow, updateAccount, updateGroup, updateLabel } from "~/state/actions";
 import { useDirectory } from "~/state/queries";
-import { MULTI_CLICK, toggleInScope, useScope } from "~/state/scope";
+import { MULTI_CLICK, showLabels, toggleInScope, useScope } from "~/state/scope";
 import { useUi } from "~/state/ui";
 import { startReconnect } from "~/components/dialogs/reconnect";
 import { openAccountSettings } from "~/components/settings/AccountsSettings";
@@ -204,10 +204,29 @@ export function AccountMenu({ account, menu }: { account: Account; menu: RowMenu
   );
 }
 
+/** "Add to view" / "Remove from view" for a label while other labels are shown (Ctrl+click's way). */
+function LabelViewMenuItem({ label }: { label: Label }) {
+  const route = useUi((s) => s.route);
+  const shown = route.page === "mail" && route.view.kind === "label" ? route.view.labelIds : [];
+  const has = shown.includes(label.id);
+  if (shown.length === 0 || (has && shown.length === 1)) return null;
+  return (
+    <>
+      <MenuItem onClick={() => showLabels(has ? shown.filter((id) => id !== label.id) : [...shown, label.id])}>
+        {has ? <MinusIcon /> : <PlusIcon />}
+        <span className="flex-1">{has ? "Remove from view" : "Add to view"}</span>
+        <span className="text-muted-foreground text-xs">{MULTI_CLICK}</span>
+      </MenuItem>
+      <MenuSeparator />
+    </>
+  );
+}
+
 export function LabelMenu({ label, menu }: { label: Label; menu: RowMenuState }) {
   const ui = useUi.getState();
   return (
-    <RowMenuShell menu={menu} width="w-48">
+    <RowMenuShell menu={menu} width="w-56">
+      <LabelViewMenuItem label={label} />
       <MenuItem onClick={() => ui.setRenaming({ kind: "label", id: label.id })}>
         <PencilIcon />
         Rename

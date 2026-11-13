@@ -170,18 +170,23 @@ export function compileQuery(parsed: ParsedQuery, lookups: CompileLookups, optio
           addTerm(term.negated, "t.id NOT IN (SELECT tl.thread_id FROM thread_labels tl)");
           break;
         }
-        const label =
-          lookups.labels.find((l) => l.id === term.value.trim()) ?? lookups.labels.find((l) => lower(l.name) === value);
-        if (!label) {
+        const findLabel = (raw: string) => lookups.labels.find((l) => l.id === raw.trim()) ?? lookups.labels.find((l) => lower(l.name) === lower(raw));
+        // label:Invoices,Receipts — any of them (unless a label is named exactly that).
+        const parts = findLabel(term.value) ? [term.value] : term.value.split(",").filter((p) => p.trim());
+        const found = parts.map((raw) => ({ raw, label: findLabel(raw) }));
+        const missing = found.filter((f) => !f.label);
+        if (found.length === 0 || missing.length > 0) {
+          const name = missing[0]?.raw ?? term.value;
           errors.push(
             lookups.labels.length > 0
-              ? `No label named "${term.value}". Labels: ${listNames(lookups.labels.map((l) => l.name))}.`
-              : `No label named "${term.value}". There are no labels yet.`,
+              ? `No label named "${name}". Labels: ${listNames(lookups.labels.map((l) => l.name))}.`
+              : `No label named "${name}". There are no labels yet.`,
           );
           add(NOTHING);
           break;
         }
-        addTerm(term.negated, "t.id IN (SELECT tl.thread_id FROM thread_labels tl WHERE tl.label_id = ?)", label.id);
+        const ids = [...new Set(found.map((f) => f.label!.id))];
+        addTerm(term.negated, `t.id IN (SELECT tl.thread_id FROM thread_labels tl WHERE tl.label_id IN (${marks(ids.length)}))`, ...ids);
         break;
       }
       case "account": {

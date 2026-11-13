@@ -29,5 +29,7 @@ module.exports = async function sign(options) {
     identity,
     identityValidation: false,
     keychain: process.env.FANCY_MAIL_MAC_SIGN_KEYCHAIN || options.keychain,
+    // Apple's timestamp server is for Apple's certificates; nothing checks a time on ours.
+    timestamp: "none",
   });
 };

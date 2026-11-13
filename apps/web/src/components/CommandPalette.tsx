@@ -189,7 +189,7 @@ function PaletteBody({ onClose }: { onClose(): void }) {
         detail: "Label",
         text: `${label.name} label`,
         icon: <ColorDot color={label.color} className="mx-1" />,
-        run: () => go({ page: "mail", view: { kind: "label", labelId: label.id, scope: useUi.getState().scope }, threadId: null }),
+        run: () => go({ page: "mail", view: { kind: "label", labelIds: [label.id], scope: useUi.getState().scope }, threadId: null }),
       });
     }
     const goShown = goItems.filter((i) => matches(i.text));

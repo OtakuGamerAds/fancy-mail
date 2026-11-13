@@ -78,6 +78,7 @@ import { useUi, type InboxTabId, type ListFilter } from "~/state/ui";
 import { goScope } from "~/state/scope";
 import { describeView, FILTER_QUERY, inboxTabQuery, inScope, listQuery, searchWidens, splitsSettled } from "~/state/view";
 import { isModKey } from "~/lib/keys";
+import { showLabels } from "~/state/scope";
 
 const FILTERS: { id: ListFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -384,7 +385,8 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
     </button>
   );
 
-  const hideLabelId = view.kind === "label" ? view.labelId : null;
+  // One label's own chip says nothing on its own list (with several, the chips tell them apart).
+  const hideLabelId = view.kind === "label" && view.labelIds.length === 1 ? view.labelIds[0]! : null;
   const isPending = threadsQuery.isPending && query !== null;
   const showEmpty = !isPending && !threadsQuery.isError && threads.length === 0 && pinnedThreads.length === 0 && shelves.length === 0;
   const actionableHere = view.kind !== "trash" && view.kind !== "spam";
@@ -430,6 +432,17 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
               <h1 className="truncate font-semibold text-[15px] text-foreground tracking-tight" data-selectable>
                 {info.title}
               </h1>
+              {view.kind === "label" ? (
+                <button
+                  type="button"
+                  aria-label={view.labelIds.length > 1 ? "Stop showing these labels" : "Stop showing this label"}
+                  title={view.labelIds.length > 1 ? "Stop showing these labels" : "Stop showing this label"}
+                  className="app-no-drag grid size-5 shrink-0 cursor-pointer place-items-center self-center rounded-md text-muted-foreground outline-none hover:bg-white/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => showLabels([])}
+                >
+                  <XIcon className="size-3.5" />
+                </button>
+              ) : null}
               {info.scopeLabel ? (
                 <span className="app-no-drag inline-flex min-w-0 max-w-56 shrink items-center self-center rounded-md bg-primary/10 ps-1.5 text-foreground/80 text-xs">
                   <span className="truncate py-0.5" title={info.scopeLabel}>

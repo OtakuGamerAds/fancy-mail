@@ -73,7 +73,8 @@ export type ViewKind = (typeof VIEW_KINDS)[number];
 
 export type MailView =
   | { kind: ViewKind; scope: ViewScope }
-  | { kind: "label"; labelId: string; scope: ViewScope }
+  /** One label, or several together (mail with any of them). */
+  | { kind: "label"; labelIds: string[]; scope: ViewScope }
   | { kind: "mailbox"; accountId: string; mailboxId: string; path: string }
   | { kind: "search"; query: string; scope: ViewScope };
 
@@ -121,7 +122,7 @@ export function scopeQuery(scope: ViewScope): string {
 export function viewQuery(view: MailView): string {
   switch (view.kind) {
     case "label":
-      return [`label:${view.labelId}`, scopeQuery(view.scope)].filter(Boolean).join(" ");
+      return [`label:${view.labelIds.join(",")}`, scopeQuery(view.scope)].filter(Boolean).join(" ");
     case "mailbox":
       return `account:${view.accountId} in:anywhere mailbox:${quoteQueryValue(view.path)}`;
     case "search":
@@ -139,7 +140,7 @@ export function sameScope(a: ViewScope, b: ViewScope): boolean {
 export function sameView(a: MailView, b: MailView): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "mailbox" && b.kind === "mailbox") return a.mailboxId === b.mailboxId;
-  if (a.kind === "label" && b.kind === "label") return a.labelId === b.labelId && sameScope(a.scope, b.scope);
+  if (a.kind === "label" && b.kind === "label") return [...a.labelIds].sort().join() === [...b.labelIds].sort().join() && sameScope(a.scope, b.scope);
   if (a.kind === "search" && b.kind === "search") return a.query === b.query && sameScope(a.scope, b.scope);
   if ("scope" in a && "scope" in b) return sameScope(a.scope, b.scope);
   return false;

@@ -6,7 +6,7 @@
  *   #/g/<groupId>/<kind>  #/a/<accountId>/<kind>
  *   #/s/g.<groupId>,a.<accountId>,…/<kind>     several groups and accounts together
  *   #/a/<accountId>/folder/<mailboxId>
- *   #/label/<labelId>  (+ a scope prefix)      #/search?q=…  (+ a scope prefix)
+ *   #/label/<labelId>[,<labelId>…]  (+ a scope prefix)      #/search?q=…  (+ a scope prefix)
  *   any of these + /t/<threadId>               an open conversation
  *   #/settings/<section>  #/activity
  *   ?palette=1 ?compose=new ?dialog=add-account ?dialog=shortcuts   overlays
@@ -35,7 +35,7 @@ export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 export type ViewRef =
   | { kind: ViewKind; scope: ViewScope }
-  | { kind: "label"; labelId: string; scope: ViewScope }
+  | { kind: "label"; labelIds: string[]; scope: ViewScope }
   | { kind: "mailbox"; accountId: string; mailboxId: string }
   | { kind: "search"; query: string; scope: ViewScope };
 
@@ -112,7 +112,7 @@ export function parseHash(hash: string): { route: Route; overlays: Overlays; val
     view = { kind: head as ViewKind, scope };
     rest = rest.slice(1);
   } else if (head === "label" && rest[1]) {
-    view = { kind: "label", labelId: rest[1], scope };
+    view = { kind: "label", labelIds: rest[1].split(",").filter(Boolean), scope };
     rest = rest.slice(2);
   } else if (head === "folder" && rest[1] && scope.type === "account") {
     view = { kind: "mailbox", accountId: scope.accountId, mailboxId: rest[1] };
@@ -142,7 +142,7 @@ function scopePrefix(scope: ViewScope): string {
 export function formatView(view: ViewRef): { path: string; query: string } {
   switch (view.kind) {
     case "label":
-      return { path: `${scopePrefix(view.scope)}/label/${enc(view.labelId)}`, query: "" };
+      return { path: `${scopePrefix(view.scope)}/label/${view.labelIds.map(enc).join(",")}`, query: "" };
     case "mailbox":
       return { path: `/a/${enc(view.accountId)}/folder/${enc(view.mailboxId)}`, query: "" };
     case "search":

@@ -31,7 +31,7 @@ function go(view: ViewRef) {
 export function goScope(scope: ViewScope) {
   const route = useUi.getState().route;
   const view = route.page === "mail" ? route.view : null;
-  if (view?.kind === "label") return go({ kind: "label", labelId: view.labelId, scope });
+  if (view?.kind === "label") return go({ kind: "label", labelIds: view.labelIds, scope });
   if (view && (VIEW_KINDS as readonly string[]).includes(view.kind)) return go({ kind: view.kind as ViewKind, scope });
   go({ kind: "inbox", scope });
 }
@@ -40,6 +40,29 @@ export function goScope(scope: ViewScope) {
 export function pickScope(item: ScopeItem, event: { ctrlKey: boolean; metaKey: boolean }) {
   const alone: ViewScope = item.type === "group" ? { type: "group", groupId: item.id } : { type: "account", accountId: item.id };
   goScope(isModKey(event) ? toggleScopeItem(currentScope(), item) : alone);
+}
+
+/** The labels shown now (none outside a label view). */
+export function currentLabelIds(): string[] {
+  const route = useUi.getState().route;
+  return route.page === "mail" && route.view.kind === "label" ? route.view.labelIds : [];
+}
+
+/** Shows these labels' mail where the views look; none: back to the inbox. */
+export function showLabels(labelIds: string[]) {
+  const scope = currentScope();
+  go(labelIds.length > 0 ? { kind: "label", labelIds, scope } : { kind: "inbox", scope });
+}
+
+/**
+ * A label in the sidebar: a click shows just its mail, a click on the one shown takes it away
+ * again (back to the inbox), and Ctrl+click (Cmd on a Mac) adds it to the labels shown or takes
+ * it out (mail with any of them).
+ */
+export function pickLabel(labelId: string, event: { ctrlKey: boolean; metaKey: boolean }) {
+  const current = currentLabelIds();
+  if (isModKey(event)) showLabels(current.includes(labelId) ? current.filter((id) => id !== labelId) : [...current, labelId]);
+  else showLabels(current.length === 1 && current[0] === labelId ? [] : [labelId]);
 }
 
 /** Adds the item to where the views look, or takes it out. */
