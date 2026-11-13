@@ -1,7 +1,7 @@
 {
   "name": "fancy-mail",
   "productName": "Fancy Mail",
-  "version": "0.1.20",
+  "version": "0.1.21",
   "description": "A calm, fast email client for many accounts, with an MCP server so your AI agents can organize your mail from the outside.",
   "private": true,
   "type": "module",
