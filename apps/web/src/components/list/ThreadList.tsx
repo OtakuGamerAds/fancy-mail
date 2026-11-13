@@ -694,6 +694,24 @@ function Shelf({
   useEffect(() => {
     if (last >= threads.length - 15 && hasNextPage && !isFetchingNextPage) void fetchNextPage();
   }, [last, threads.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // Opening a shelf shows it: its rows come after the whole list, so below a long inbox the
+  // click would change nothing in sight. Once its first rows are there, its header scrolls up
+  // to the top (an open shelf you come back to stays where it is).
+  const wasOpen = useRef(open);
+  const reveal = useRef(false);
+  useEffect(() => {
+    if (open && !wasOpen.current) reveal.current = true;
+    wasOpen.current = open;
+  }, [open]);
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    const list = listRef.current;
+    if (!reveal.current || !open || threads.length === 0 || !scroller || !list) return;
+    reveal.current = false;
+    const offset = list.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    scroller.scrollTo({ top: Math.max(0, scroller.scrollTop + offset - SHELF_HEADER_HEIGHT), behavior: "smooth" });
+  }, [open, threads.length, scrollRef]);
   return (
     <>
       <div

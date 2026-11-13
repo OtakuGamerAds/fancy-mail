@@ -18,11 +18,16 @@
 //   macOS    Fancy-Mail-<version>-<arch>.dmg (to install) and .zip (+ .blockmap, for updates),
 //            latest-mac.yml
 //
-// A Mac build is signed with the Developer ID in CSC_LINK / CSC_KEY_PASSWORD and notarized with
-// APPLE_API_KEY (the .p8 file's path) / APPLE_API_KEY_ID / APPLE_API_ISSUER when all of them
-// are set; otherwise it is signed ad hoc, which runs after the person allows it once (README).
+// A Mac build is signed, in this order of preference:
+//   1. Developer ID: CSC_LINK / CSC_KEY_PASSWORD, notarized with APPLE_API_KEY (the .p8 file's
+//      path) / APPLE_API_KEY_ID / APPLE_API_ISSUER. No warning at all, updates in the app.
+//   2. Fancy Mail's own certificate: FANCY_MAIL_MAC_SIGN_IDENTITY (+ _KEYCHAIN), see
+//      scripts/mac-sign.cjs. The same signature every version: the Keychain's "Always Allow"
+//      sticks and updates install in the app; the first open needs "Open Anyway" once.
+//   3. Ad hoc: runs after "Open Anyway", but every version is a new app to macOS.
 //
-// The version is the root package.json's. Other arguments go to electron-builder.
+// The version is the root package.json's (FANCY_MAIL_BUILD_VERSION overrides it, for test
+// builds). Other arguments go to electron-builder.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -64,6 +69,7 @@ if (arch !== "x64" && arch !== "arm64") fail(`Can't build for the "${arch}" arch
 if (platform === "mac" && process.platform !== "darwin") fail("A Mac build needs a Mac (dmg and code signing are macOS tools). GitHub Actions builds it on release.");
 
 const signMac = platform === "mac" && SIGNING_ENV.every((name) => process.env[name]);
+const selfSignMac = platform === "mac" && !signMac && Boolean(process.env.FANCY_MAIL_MAC_SIGN_IDENTITY);
 
 // ── The electron-builder config: the shared file plus what this build needs ─────────────────
 
@@ -78,9 +84,12 @@ function buildConfig() {
     config.mac = signMac
       ? // Developer ID (from CSC_LINK), hardened runtime with electron-builder's entitlements, notarized.
         { ...config.mac, hardenedRuntime: true, notarize: true }
-      : // Ad hoc: Apple Silicon runs only signed code. No hardened runtime (it would need entitlements
-        // a Developer ID brings).
-        { ...config.mac, identity: "-", hardenedRuntime: false, notarize: false };
+      : selfSignMac
+        ? // "-" gets electron-builder to call the hook, which signs with our certificate instead.
+          { ...config.mac, identity: "-", sign: path.join(ROOT, "scripts", "mac-sign.cjs"), hardenedRuntime: false, notarize: false }
+        : // Ad hoc: Apple Silicon runs only signed code. No hardened runtime (it would need entitlements
+          // a Developer ID brings).
+          { ...config.mac, identity: "-", hardenedRuntime: false, notarize: false };
   }
   const file = path.join(ROOT, "apps", "desktop", "dist", "electron-builder.json");
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -105,7 +114,8 @@ step("Bundling the server", process.execPath, [path.join(ROOT, "scripts", "build
 step("Building the desktop shell", process.execPath, [path.join(ROOT, "apps", "desktop", "build.mjs")]);
 
 const config = buildConfig();
-const label = platform === "mac" ? `macOS ${arch}${signMac ? ", signed and notarized" : ", signed ad hoc"}` : `Windows ${arch}`;
+const label =
+  platform === "mac" ? `macOS ${arch}${signMac ? ", signed and notarized" : selfSignMac ? ", signed with Fancy Mail's certificate" : ", signed ad hoc"}` : `Windows ${arch}`;
 step(
   `Packaging Fancy Mail ${version} for ${label} (Electron ${electronVersion})`,
   process.execPath,

@@ -252,4 +252,5 @@ export function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
-export const rootVersion = () => readJson(path.join(ROOT, "package.json")).version;
+/** The version being built: the root package.json's, or FANCY_MAIL_BUILD_VERSION for a test build. */
+export const rootVersion = () => process.env.FANCY_MAIL_BUILD_VERSION || readJson(path.join(ROOT, "package.json")).version;

@@ -11,7 +11,9 @@ name: Release
 #
 # Mac signing: with the secrets CSC_LINK (the Developer ID .p12, base64), CSC_KEY_PASSWORD,
 # APPLE_API_KEY (the .p8 key's text), APPLE_API_KEY_ID and APPLE_API_ISSUER the Mac app is
-# signed and notarized, and updates itself; without them it is signed ad hoc (README: macOS).
+# signed and notarized. Otherwise MAC_SELF_SIGN_P12 / MAC_SELF_SIGN_PASSWORD (Fancy Mail's own
+# certificate) sign it the same way every version, so it updates itself and the Keychain keeps
+# its permission; without any of them it is signed ad hoc.
 
 on:
   push:
@@ -74,6 +76,14 @@ jobs:
       - name: Install Electron
         run: node node_modules/electron/install.js
 
+      # The same certificate every version, so macOS keeps seeing one app (scripts/mac-sign.cjs).
+      - name: Mac signing certificate
+        if: matrix.platform == 'mac'
+        env:
+          MAC_SELF_SIGN_P12: ${{ secrets.MAC_SELF_SIGN_P12 }}
+          MAC_SELF_SIGN_PASSWORD: ${{ secrets.MAC_SELF_SIGN_PASSWORD }}
+        run: bash scripts/ci/mac-signing-setup.sh
+
       - name: Build
         shell: bash
         env:
@@ -105,7 +115,7 @@ jobs:
 
       - name: Screenshots of the app's views
         if: matrix.platform == 'mac' && matrix.check
-        run: pnpm snapshot --no-build inbox shortcuts palette settings-accounts flow-5-context thread-html sidebar-hidden
+        run: pnpm snapshot --no-build inbox inbox-settled-open flow-9-shelves-open shortcuts palette settings-accounts flow-5-context thread-html flow-20-ungrouped-click sidebar-hidden
 
       - name: Upload the launch check and screenshots
         if: always() && matrix.check

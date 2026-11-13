@@ -1,0 +1,44 @@
+name: Mac update check
+
+# Proves a Mac update installs in the app and keeps the Keychain's permission, with two real
+# builds signed by Fancy Mail's certificate (scripts/mac-update-check.mjs). Run it from the
+# Actions tab after touching signing or updates; it publishes nothing.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Update A to B on macOS
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Electron
+        run: node node_modules/electron/install.js
+      - name: Mac signing certificate
+        env:
+          MAC_SELF_SIGN_P12: ${{ secrets.MAC_SELF_SIGN_P12 }}
+          MAC_SELF_SIGN_PASSWORD: ${{ secrets.MAC_SELF_SIGN_PASSWORD }}
+        run: bash scripts/ci/mac-signing-setup.sh
+      - name: Update check
+        run: node scripts/mac-update-check.mjs
+      - name: Upload what it saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-update-check
+          path: mac-update-check
+          if-no-files-found: ignore
+          retention-days: 14

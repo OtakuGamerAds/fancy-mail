@@ -37,9 +37,12 @@ function writeAtomically(file: string, data: string | Buffer): void {
 
 export function loadProtectedKey(dataDir: string): { key: Buffer; created: boolean } {
   const file = path.join(dataDir, "vault-key.bin");
+  const mac = process.platform === "darwin";
   if (!safeStorage.isEncryptionAvailable()) {
     throw new VaultKeyError(
-      "Fancy Mail can't use Windows' protected storage, so it can't keep your passwords safe. Sign in to Windows normally (not a temporary profile) and start Fancy Mail again.",
+      mac
+        ? "Fancy Mail can't use the macOS Keychain, so it can't keep your passwords safe. Sign in to your Mac normally and start Fancy Mail again."
+        : "Fancy Mail can't use Windows' protected storage, so it can't keep your passwords safe. Sign in to Windows normally (not a temporary profile) and start Fancy Mail again.",
     );
   }
   if (fs.existsSync(file)) {
@@ -48,7 +51,9 @@ export function loadProtectedKey(dataDir: string): { key: Buffer; created: boole
       base64 = safeStorage.decryptString(fs.readFileSync(file));
     } catch {
       throw new VaultKeyError(
-        `Fancy Mail can't unlock its saved passwords (${file}). This happens when the data folder was copied from another Windows user or computer. Your mail is untouched.`,
+        mac
+          ? "Fancy Mail can't unlock its saved passwords: macOS didn't let it read its key in the Keychain. Open Fancy Mail again and, when macOS asks, enter the password you sign in to this Mac with and choose Always Allow. Your mail is untouched."
+          : `Fancy Mail can't unlock its saved passwords (${file}). This happens when the data folder was copied from another Windows user or computer. Your mail is untouched.`,
       );
     }
     return { key: decodeKey(base64, file), created: false };

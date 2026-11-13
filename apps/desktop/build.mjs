@@ -16,7 +16,8 @@ const here = import.meta.dirname;
 const root = path.join(here, "..", "..");
 const watch = process.argv.includes("--watch");
 const dev = watch || process.argv.includes("--dev");
-const { version } = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+// FANCY_MAIL_BUILD_VERSION: a test build's own version (scripts/mac-update-check.mjs).
+const version = process.env.FANCY_MAIL_BUILD_VERSION || JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
 
 /** Logs each finished build (the dev script restarts Electron on "built"). */
 const report = {

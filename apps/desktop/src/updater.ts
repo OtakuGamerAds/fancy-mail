@@ -14,10 +14,13 @@
  * The state carries both the short names the brief uses (version, percent, status "ready")
  * and the explicit ones (availableVersion, downloadedVersion, downloadPercent).
  *
- * macOS installs an update only when the app carries a Developer ID signature (Squirrel.Mac
- * checks the new version against it). A build without one (ad hoc, see scripts/dist.mjs) still
- * finds updates, but its update button opens the new .dmg in the browser instead
- * (`manual: true`).
+ * macOS installs an update only when the new version is signed like the running one
+ * (Squirrel.Mac checks it): a Developer ID or Fancy Mail's own certificate (scripts/dist.mjs).
+ * A build signed ad hoc is a different app every version, so its update button opens the new
+ * .dmg in the browser instead (`manual: true`); so does any Mac whose install in the app fails.
+ *
+ * Test builds only (scripts/mac-update-check.mjs): FANCY_MAIL_UPDATE_URL reads the feed from
+ * there, and FANCY_MAIL_UPDATE_TEST=1 downloads and installs an update as soon as there is one.
  */
 import { execFile } from "node:child_process";
 import path from "node:path";
@@ -42,11 +45,13 @@ export interface UpdateState {
   downloadPercent: number | null;
   message: string | null;
   errorContext: "check" | "download" | "install" | null;
-  /** macOS without a Developer ID signature: "download" opens the .dmg in the browser. */
+  /** macOS signed ad hoc (or an install in the app failed): "download" opens the .dmg in the browser. */
   manual: boolean;
 }
 
-const FEED_URL = "https://github.com/OtakuGamerAds/fancy-mail/releases/latest/download";
+const RELEASES_URL = "https://github.com/OtakuGamerAds/fancy-mail/releases/latest/download";
+const FEED_URL = process.env.FANCY_MAIL_UPDATE_URL || RELEASES_URL;
+const AUTO_INSTALL_FOR_TEST = process.env.FANCY_MAIL_UPDATE_TEST === "1";
 const STARTUP_DELAY_MS = 10_000;
 const POLL_INTERVAL_MS = 4 * 60 * 1000;
 
@@ -136,7 +141,7 @@ export async function checkForUpdate(): Promise<UpdateState> {
 
 /** The release's .dmg for this Mac (scripts/dist.mjs names it Fancy-Mail-<version>-<arch>.dmg). */
 function dmgUrl(version: string): string {
-  return `${FEED_URL}/Fancy-Mail-${version}-${process.arch === "arm64" ? "arm64" : "x64"}.dmg`;
+  return `${RELEASES_URL}/Fancy-Mail-${version}-${process.arch === "arm64" ? "arm64" : "x64"}.dmg`;
 }
 
 export async function downloadUpdate(): Promise<UpdateState> {
@@ -152,8 +157,14 @@ export async function downloadUpdate(): Promise<UpdateState> {
     await updater.downloadUpdate();
   } catch (error) {
     downloading = false;
-    // Back to "available" so the button offers a retry.
-    setState({ status: "available", downloadPercent: null, message: errorMessage(error), errorContext: "download" });
+    log.warn("[updater] the download failed:", errorMessage(error));
+    if (process.platform === "darwin") {
+      // Squirrel.Mac refused it (most often: signed differently). The browser way still works.
+      setState({ status: "available", downloadPercent: null, manual: true, message: "The update couldn't install in the app. Click to download it instead.", errorContext: "download" });
+    } else {
+      // Back to "available" so the button offers a retry.
+      setState({ status: "available", downloadPercent: null, message: errorMessage(error), errorContext: "download" });
+    }
   }
   return state;
 }
@@ -171,26 +182,29 @@ export async function installUpdate(beforeQuit: () => Promise<void>): Promise<Up
 }
 
 /**
- * Whether this Mac app carries a Developer ID signature (only then can it install its own
- * updates). `codesign -dv` prints the signing authority; an ad hoc build has none.
+ * Whether this Mac app is signed by a certificate (a Developer ID or Fancy Mail's own), the
+ * same one every version: only then can it install its own updates. `codesign -dv` names the
+ * certificate ("Authority="); an ad hoc build has none ("Signature=adhoc").
  */
-function hasDeveloperIdSignature(): Promise<boolean> {
+function hasStableSignature(): Promise<boolean> {
   const bundle = path.resolve(process.execPath, "..", "..", "..");
   return new Promise((resolve) => {
     execFile("/usr/bin/codesign", ["-dv", "--verbose=2", bundle], (error, stdout, stderr) => {
-      resolve(!error && /Authority=Developer ID Application:/.test(`${stdout}${stderr}`));
+      const text = `${stdout}${stderr}`;
+      resolve(!error && /^Authority=/m.test(text) && !/Signature=adhoc/.test(text));
     });
   });
 }
 
-export function initUpdater(onState: (state: UpdateState) => void): void {
+/** `beforeInstall` stops the server (test mode installs without the button, which does it otherwise). */
+export function initUpdater(onState: (state: UpdateState) => void, beforeInstall: () => Promise<void> = async () => {}): void {
   notify = onState;
   if (!app.isPackaged) return;
   if (process.platform === "darwin") {
     // Until the signature is known, updates go through the browser (the safe way).
     setState({ manual: true });
-    void hasDeveloperIdSignature().then((signed) => {
-      log.info(signed ? "[updater] signed with a Developer ID: updates install in the app" : "[updater] not signed with a Developer ID: updates download in the browser");
+    void hasStableSignature().then((signed) => {
+      log.info(signed ? "[updater] signed with a certificate: updates install in the app" : "[updater] signed ad hoc: updates download in the browser");
       setState({ manual: !signed });
     });
   }
@@ -208,6 +222,11 @@ export function initUpdater(onState: (state: UpdateState) => void): void {
     debug: () => {},
   };
   wireEvents(autoUpdater);
+  if (AUTO_INSTALL_FOR_TEST) {
+    log.info(`[updater] test mode: installing any update from ${FEED_URL}`);
+    autoUpdater.on("update-available", () => void downloadUpdate());
+    autoUpdater.on("update-downloaded", () => void installUpdate(beforeInstall));
+  }
   setState({ enabled: true, status: "idle" });
   setTimeout(() => void checkForUpdate(), STARTUP_DELAY_MS);
   setInterval(() => void checkForUpdate(), POLL_INTERVAL_MS);

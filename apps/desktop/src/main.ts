@@ -336,7 +336,13 @@ function startApp(): void {
     }
   }, SLOW_START_MS);
 
-  initUpdater((state) => sendToWindow(CHANNELS.updateChanged, state));
+  initUpdater(
+    (state) => sendToWindow(CHANNELS.updateChanged, state),
+    async () => {
+      quitting = true;
+      await stopServer();
+    },
+  );
   setTimeout(cleanAttachments, 30_000);
 }
 
