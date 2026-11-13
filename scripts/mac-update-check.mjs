@@ -75,13 +75,8 @@ if (!sigA.requirement || sigA.requirement !== sigB.requirement) fail("The two ve
 if (/cdhash/.test(sigA.requirement)) fail("The designated requirement is a cdhash (ad hoc): it changes with every build.");
 console.log("✓ both versions are signed with the same certificate and requirement");
 
-// The build machine trusts the certificate (codesign needs that); a person's Mac doesn't. Take
-// the trust away so the update below is checked as it will be there.
-if (process.env.FANCY_MAIL_MAC_SIGN_CERT) {
-  const removed = spawnSync("sudo", ["security", "remove-trusted-cert", "-d", process.env.FANCY_MAIL_MAC_SIGN_CERT], { encoding: "utf8" });
-  if (removed.status !== 0) fail(`Couldn't take the certificate's trust away: ${removed.stderr}`);
-  console.log("✓ the certificate is no longer trusted on this Mac (as on a person's Mac)");
-}
+// Like a person's Mac, this one doesn't trust the certificate (scripts/ci/mac-signing-setup.sh
+// adds no trust settings), so the update below is checked as it will be there.
 
 console.log("\n▸ Installing A and serving B as its update");
 fs.mkdirSync(path.dirname(installed), { recursive: true });

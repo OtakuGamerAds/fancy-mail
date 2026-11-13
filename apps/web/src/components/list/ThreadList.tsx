@@ -713,11 +713,9 @@ function Shelf({
   // to the top (an open shelf you come back to stays where it is).
   const wasOpen = useRef(open);
   const reveal = useRef(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open && !wasOpen.current) reveal.current = true;
     wasOpen.current = open;
-  }, [open]);
-  useLayoutEffect(() => {
     const scroller = scrollRef.current;
     const list = listRef.current;
     if (!reveal.current || !open || threads.length === 0 || !scroller || !list) return;

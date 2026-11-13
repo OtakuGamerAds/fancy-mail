@@ -94,6 +94,16 @@ describe("compileQuery", () => {
     expect(r.queryErrors).toEqual(['No label named "Rechnungen". Labels: Invoices.']);
   });
 
+  it("takes several labels as any of them (label:A,B), by id or name", () => {
+    const news = addLabel(stack.store, "News");
+    const digest = thread();
+    addMessage(stack.store, work, { threadId: digest, subject: "Monthly digest", text: "news", labels: [news], in: ["inbox"] });
+    expect(found(`label:${invoices},${news}`).sort()).toEqual([ids.invoice, digest].sort());
+    expect(found("label:Invoices,News").sort()).toEqual([ids.invoice, digest].sort());
+    expect(found("label:invoices label:news")).toEqual([]); // two label: terms still mean both
+    expect(search("label:Invoices,Nope").queryErrors).toEqual(['No label named "Nope". Labels: Invoices, News.']);
+  });
+
   it("resolves accounts by email, name or id, and groups by name or id", () => {
     expect(found("account:STUDIO@work.test")).toHaveLength(2);
     expect(found("account:Private in:anywhere")).toHaveLength(3);

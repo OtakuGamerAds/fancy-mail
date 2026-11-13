@@ -23,12 +23,10 @@ security import "$p12" -k "$keychain" -P "$MAC_SELF_SIGN_PASSWORD" -T /usr/bin/c
 # codesign may use the key without a dialog.
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" > /dev/null
 security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
-# codesign signs only with a certificate this Mac trusts for code signing: trust ours here (a
-# throwaway runner). A person's Mac never needs to: running and updating check the signature,
-# not trust. scripts/mac-update-check.mjs takes the trust away again before it tests that.
+# No trust settings: codesign signs with the certificate as it is, and a person's Mac checks the
+# signature (the same certificate every version), never whether it trusts it.
 cert="$RUNNER_TEMP/fancy-mail-signing.pem"
 openssl pkcs12 -in "$p12" -nokeys -clcerts -passin "pass:$MAC_SELF_SIGN_PASSWORD" -out "$cert"
-sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$cert"
 rm -f "$p12"
 
 # Self-signed, so not "valid" to macOS (-v would hide it); codesign signs with it all the same.

@@ -28,7 +28,8 @@ interface QueryShape {
   isStarred: boolean;
   /** is:settled (true), is:unsettled or -is:settled (false), neither (null); the same for the other states. */
   states: Partial<Record<StateKey, boolean>>;
-  labelValues: Set<string>;
+  /** Each label: term's labels (label:A,B is any of them), lowercased ids or names. */
+  labelGroups: string[][];
 }
 
 const shapeCache = new Map<string, QueryShape>();
@@ -37,12 +38,12 @@ function shapeOf(query: string): QueryShape {
   const cached = shapeCache.get(query);
   if (cached) return cached;
   const parsed = parseQuery(query);
-  const shape: QueryShape = { inValues: new Set(), isUnread: false, isStarred: false, states: {}, labelValues: new Set() };
+  const shape: QueryShape = { inValues: new Set(), isUnread: false, isStarred: false, states: {}, labelGroups: [] };
   for (const term of parsed.terms) {
     if (term.kind === "in" && !term.negated) shape.inValues.add(term.value);
     if (term.kind === "is" && !term.negated && term.value === "unread") shape.isUnread = true;
     if (term.kind === "is" && !term.negated && term.value === "starred") shape.isStarred = true;
-    if (term.kind === "label" && !term.negated) shape.labelValues.add(term.value.toLowerCase());
+    if (term.kind === "label" && !term.negated) shape.labelGroups.push(term.value.toLowerCase().split(","));
     if (term.kind === "is" && term.value === "unsettled") shape.states.settled = term.negated;
     else if (term.kind === "is" && (STATE_KEYS as readonly string[]).includes(term.value)) shape.states[term.value as StateKey] = !term.negated;
   }
@@ -155,11 +156,11 @@ function leavesList(
   if (!anywhere && !shape.inValues.has("trash") && !before.inTrash && after.inTrash) return true;
   if (!anywhere && !shape.inValues.has("spam") && !before.inSpam && after.inSpam) return true;
   if ((shape.isStarred || shape.inValues.has("starred")) && before.starred && !after.starred) return true;
-  if (shape.labelValues.size > 0) {
-    for (const removed of before.labelIds.filter((id) => !after.labelIds.includes(id))) {
-      const name = labelNames.get(removed)?.toLowerCase();
-      if (shape.labelValues.has(removed.toLowerCase()) || (name && shape.labelValues.has(name))) return true;
-    }
+  // A label view keeps a conversation while it has any of the view's labels.
+  for (const group of shape.labelGroups) {
+    const has = (ids: string[]) =>
+      ids.some((id) => group.includes(id.toLowerCase()) || group.includes(labelNames.get(id)?.toLowerCase() ?? "\u0000"));
+    if (has(before.labelIds) && !has(after.labelIds)) return true;
   }
   return false;
 }
