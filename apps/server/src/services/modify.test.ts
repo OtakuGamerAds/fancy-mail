@@ -148,6 +148,30 @@ describe("modify and undo", () => {
     expect(roles(m)).toEqual(["all", "inbox"]);
   });
 
+  it("deleted mail that comes back into the inbox (old labels out of the Bin) is taken out again", () => {
+    const a = thread();
+    const m = addMessage(stack.store, gmail, { threadId: a, in: ["inbox", "all"] });
+    stack.services.threads.modify([a], [{ type: "trash" }], user);
+    stack.store.messages.addLocation(m, stack.store.mailboxes.byRole(gmail.accountId, "inbox")!.id, null);
+    expect(stack.services.threads.keepDeletedOutOfInbox()).toEqual([a]);
+    expect(roles(m)).toEqual(["all"]);
+    expect(stack.services.threads.keepDeletedOutOfInbox()).toEqual([]);
+  });
+
+  it("sends every kept message once from the Bin into the Deleted folder", () => {
+    const a = thread();
+    addMessage(stack.store, gmail, { threadId: a, in: ["inbox", "all"] });
+    stack.services.threads.modify([a], [{ type: "trash" }], user);
+    const before = stack.store.outbox.pending(gmail.accountId).length;
+    expect([...stack.services.threads.moveKeptOutOfBin().values()]).toEqual([1]);
+    const ops = stack.store.outbox.pending(gmail.accountId);
+    expect(ops.length).toBe(before + 1);
+    const change = (ops.at(-1)!.payload as { changes: { addLabels: string[]; removeFrom: { role: string }[] }[] }).changes[0]!;
+    expect(change.addLabels).toEqual(["Deleted"]);
+    expect(change.removeFrom.map((r) => r.role)).toEqual(["trash"]);
+    expect(stack.services.threads.moveKeptOutOfBin().size).toBe(0);
+  });
+
   it("agents can't delete for good", () => {
     const a = thread();
     addMessage(stack.store, gmail, { threadId: a, in: ["inbox", "all"] });

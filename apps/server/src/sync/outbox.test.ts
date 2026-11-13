@@ -37,13 +37,23 @@ describe("Gmail outbox translation", () => {
     expect(back[0]).toMatchObject({ type: "flags", add: ["\\Inbox"], useLabels: true });
   });
 
-  it("trash and spam are moves; restore moves back to INBOX or All Mail", () => {
+  it("trash and spam are moves; out of the Bin goes into the inbox or a label's folder, never All Mail", () => {
     const trash = change({ addTo: [box("mbx_trash", "[Gmail]/Trash", "trash")], removeFrom: [{ ...box("mbx_all", "[Gmail]/All Mail", "all"), uid: 41 }] });
     expect(planGmailChange(trash, ALL, PATHS)).toEqual([{ type: "move", path: "[Gmail]/All Mail", uid: 41, messageId: "msg_1", to: "[Gmail]/Trash", toMailboxId: "mbx_trash" }]);
     const restoreInbox = change({ removeFrom: [{ ...box("mbx_trash", "[Gmail]/Trash", "trash"), uid: 7 }], addTo: [box("mbx_in", "INBOX", "inbox"), box("mbx_all", "[Gmail]/All Mail", "all")] });
     expect(planGmailChange(restoreInbox, TRASH, PATHS)[0]).toMatchObject({ type: "move", path: "[Gmail]/Trash", to: "INBOX" });
     const restoreArchived = change({ removeFrom: [{ ...box("mbx_trash", "[Gmail]/Trash", "trash"), uid: 7 }], addTo: [box("mbx_all", "[Gmail]/All Mail", "all")] });
-    expect(planGmailChange(restoreArchived, TRASH, PATHS)[0]).toMatchObject({ type: "move", to: "[Gmail]/All Mail" });
+    // Gmail ignores a move from the Bin into All Mail (it stays in the Bin): the inbox instead.
+    expect(planGmailChange(restoreArchived, TRASH, PATHS)[0]).toMatchObject({ type: "move", to: "INBOX" });
+    // Kept deleted mail: from the Bin into the Deleted folder (its label), after labelling it.
+    const keep = change({ removeFrom: [{ ...box("mbx_trash", "[Gmail]/Trash", "trash"), uid: null }], addTo: [box("mbx_all", "[Gmail]/All Mail", "all")], addLabels: ["Deleted"] });
+    const plan = planGmailChange(keep, TRASH, PATHS);
+    expect(plan).toEqual([
+      { type: "flags", path: "[Gmail]/Trash", uid: 7, messageId: "msg_1", add: ["Deleted"], remove: [], useLabels: true },
+      { type: "move", path: "[Gmail]/Trash", uid: 7, messageId: "msg_1", to: "Deleted", toMailboxId: null },
+    ]);
+    // Already out of the Bin: only the label (nothing moves).
+    expect(planGmailChange(keep, ALL, PATHS).map((c) => c.type)).toEqual(["flags"]);
   });
 
   it("labels go by name through X-GM-LABELS", () => {

@@ -15,7 +15,7 @@ import type { CallContext } from "./context.ts";
 import { invalidate, notifyOutbox, writeActivity } from "./env.ts";
 import type { ServiceEnv } from "./env.ts";
 import { applyDeltas, invertDelta, locationsOf, outboxOpsFor, planAction, summarize } from "./mutate.ts";
-import { ensureDeletedLabel, keepServerTrash } from "./keepTrash.ts";
+import { ensureDeletedLabel, keepDeletedOutOfInbox, keepServerTrash, moveKeptOutOfBin } from "./keepTrash.ts";
 import { ACTION_STATE, ensureStateLabel, stateLabelIds } from "./settled.ts";
 import type { MessageDelta } from "./mutate.ts";
 
@@ -436,6 +436,16 @@ export function createThreadsService(env: ServiceEnv) {
     /** Once per account: what is in Gmail's Bin moves out to Deleted (kept). */
     keepServerTrash(): Map<string, number> {
       return keepServerTrash(env);
+    },
+
+    /** Once per Gmail account: kept mail still in the Bin moves into the Deleted folder. */
+    moveKeptOutOfBin(): Map<string, number> {
+      return moveKeptOutOfBin(env);
+    },
+
+    /** Deleted mail stays out of the inbox (old labels come back when mail leaves the Bin). */
+    keepDeletedOutOfInbox(): string[] {
+      return keepDeletedOutOfInbox(env);
     },
 
     /** Waiting and snoozed conversations whose time is up come back (a timer calls this). */

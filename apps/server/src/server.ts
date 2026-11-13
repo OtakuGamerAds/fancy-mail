@@ -143,12 +143,16 @@ export async function createServer(config: ServerConfig, options: CreateServerOp
     const keepTrash = () => {
       try {
         for (const [email, count] of services.threads.keepServerTrash()) log.info("kept deleted mail out of the Bin", { account: email, conversations: count });
+        for (const [email, count] of services.threads.moveKeptOutOfBin()) log.info("moving kept mail from the Bin into Deleted", { account: email, messages: count });
+        const tidied = services.threads.keepDeletedOutOfInbox();
+        if (tidied.length > 0) log.info("took deleted mail out of the inbox", { conversations: tidied.length });
       } catch (error) {
         log.warn("could not keep the deleted mail", { error });
       }
     };
     keepTrash();
-    const keepTrashTimer = setInterval(keepTrash, 10 * 60_000);
+    // Again every few minutes: mail leaving the Bin may bring its inbox label back with it.
+    const keepTrashTimer = setInterval(keepTrash, 3 * 60_000);
     keepTrashTimer.unref?.();
     wakeTimer.unref?.();
 

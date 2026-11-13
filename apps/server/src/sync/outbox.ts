@@ -68,14 +68,18 @@ export function planGmailChange(change: OutboxMessageChange, copy: ServerCopy | 
       out.push({ type: "move", path: copy.path, uid: copy.uid, messageId, to: target === "trash" ? paths.trash : paths.spam, toMailboxId: change.addTo.find((m) => m.role === target)?.id ?? null });
     }
   } else if (dead && (removes.has("trash") || removes.has("spam") || adds.has("inbox") || adds.has("all"))) {
-    const toInbox = adds.has("inbox");
+    // Out of the Bin or Spam: Gmail ignores a move into All Mail (the message stays where it
+    // was), so it moves into a label's folder — the one this change adds (Deleted, for kept
+    // deleted mail) — or into the inbox.
+    const label = change.addLabels[0];
+    const toInbox = adds.has("inbox") || !label;
     out.push({
       type: "move",
       path: copy.path,
       uid: copy.uid,
       messageId,
-      to: toInbox ? paths.inbox : paths.all,
-      toMailboxId: (toInbox ? change.addTo.find((m) => m.role === "inbox") : change.addTo.find((m) => m.role === "all"))?.id ?? null,
+      to: toInbox ? paths.inbox : label,
+      toMailboxId: toInbox ? (change.addTo.find((m) => m.role === "inbox")?.id ?? null) : null,
     });
   } else if (!dead) {
     if (adds.has("inbox")) out.push({ type: "flags", path: copy.path, uid: copy.uid, messageId, add: ["\\Inbox"], remove: [], useLabels: true });
