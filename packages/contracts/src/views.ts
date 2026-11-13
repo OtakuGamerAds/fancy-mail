@@ -17,6 +17,13 @@ export type ViewScope =
 
 export type ScopeItem = { type: "group"; id: string } | { type: "account"; id: string };
 
+/**
+ * "Ungrouped" (the accounts in no group) is a group to the views: its id is the search's
+ * group:none, so it opens, counts and combines like any group. No real group can be named or
+ * numbered "none".
+ */
+export const UNGROUPED_ID = "none";
+
 export function scopeItems(scope: ViewScope): ScopeItem[] {
   switch (scope.type) {
     case "all":

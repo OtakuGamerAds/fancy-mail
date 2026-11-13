@@ -3,7 +3,7 @@
  * right click (anchored at the pointer) or by the row's "…" button (anchored to it), so there
  * is never a second menu beside the first.
  */
-import { scopeHas, scopeItems, type Account, type Group, type Label, type ScopeItem } from "@fancy-mail/contracts";
+import { scopeHas, scopeItems, UNGROUPED_ID, type Account, type Group, type Label, type ScopeItem } from "@fancy-mail/contracts";
 import {
   CogIcon,
   MinusIcon,
@@ -111,6 +111,20 @@ export function GroupMenu({ group, menu }: { group: Group; menu: RowMenuState })
       <MenuItem variant="destructive" onClick={() => ui.openDialog({ type: "delete-group", groupId: group.id })}>
         <Trash2Icon />
         Delete group…
+      </MenuItem>
+    </RowMenuShell>
+  );
+}
+
+/** "Ungrouped" is no real group: it can be added to the view, not renamed, colored or deleted. */
+export function UngroupedMenu({ menu }: { menu: RowMenuState }) {
+  const ui = useUi.getState();
+  return (
+    <RowMenuShell menu={menu}>
+      <ScopeMenuItem item={{ type: "group", id: UNGROUPED_ID }} />
+      <MenuItem onClick={() => ui.setRenaming({ kind: "group", id: "new" })}>
+        <FolderPlusIcon />
+        New group
       </MenuItem>
     </RowMenuShell>
   );

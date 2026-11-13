@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { VIEW_KINDS, VIEW_TITLES, type ViewKind } from "@fancy-mail/contracts";
+import { UNGROUPED_ID, VIEW_KINDS, VIEW_TITLES, type ViewKind } from "@fancy-mail/contracts";
 import { AccountAvatar, ColorDot } from "~/components/common";
 import { removeDemoMail } from "~/components/list/DemoBanner";
 import { DIALOG_BACKDROP_CLASS, DIALOG_POPUP_CLASS } from "~/components/ui/dialog-styles";
@@ -157,6 +157,17 @@ function PaletteBody({ onClose }: { onClose(): void }) {
         text: `${group.name} group`,
         icon: <ColorDot color={group.color} className="mx-1" />,
         run: () => go({ page: "mail", view: { kind: "inbox", scope: { type: "group", groupId: group.id } }, threadId: null }),
+      });
+    }
+    if (dir.groups.length > 0 && dir.accounts.some((a) => a.groupId === null || !dir.groupById.has(a.groupId))) {
+      goItems.push({
+        id: "group:ungrouped",
+        group: "Go to",
+        title: "Ungrouped",
+        detail: "Accounts in no group",
+        text: "ungrouped no group accounts",
+        icon: <ColorDot color={null} className="mx-1" />,
+        run: () => go({ page: "mail", view: { kind: "inbox", scope: { type: "group", groupId: UNGROUPED_ID } }, threadId: null }),
       });
     }
     for (const account of dir.accounts) {

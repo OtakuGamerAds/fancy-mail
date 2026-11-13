@@ -4,7 +4,7 @@
  * Labels sections that collapse; a pinned footer with Activity, the agent line and Settings.
  * While a search is on, groups, accounts and labels count their matches (the rest fade).
  */
-import { scopeHas, type Account, type Group, type Label, type ScopeItem, type ViewKind } from "@fancy-mail/contracts";
+import { scopeHas, UNGROUPED_ID, type Account, type Group, type Label, type ScopeItem, type ViewKind } from "@fancy-mail/contracts";
 import {
   ArchiveIcon,
   LayersIcon,
@@ -42,7 +42,7 @@ import { scopeAccounts, scopeLabel } from "~/state/view";
 import { openAccountSettings } from "~/components/settings/AccountsSettings";
 import { SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN, useUi } from "~/state/ui";
 import { useColumnResize } from "~/hooks/useColumnResize";
-import { AccountMenu, GroupMenu, LabelMenu, useRowMenu } from "./EntityMenus";
+import { AccountMenu, GroupMenu, LabelMenu, UngroupedMenu, useRowMenu } from "./EntityMenus";
 import { Count, InlineNameField, RowIconButton, SidebarRow, sidebarRowClass } from "./SidebarRow";
 import { SidebarFooter } from "./SidebarFooter";
 import { MatchCount, SidebarSearch, useSearchMatches, type SearchMatches } from "./SidebarSearch";
@@ -455,26 +455,47 @@ function UngroupedBlock({
 }) {
   const collapsed = useUi((s) => !!s.collapsedSections.ungrouped);
   const toggle = useUi((s) => s.toggleSection);
+  const scope = useScope();
+  const onMail = useUi((s) => s.route.page === "mail");
+  // Like a group: a click shows all its accounts' mail, Ctrl+click adds it, the arrow folds it.
+  const item: ScopeItem = { type: "group", id: UNGROUPED_ID };
+  const menu = useRowMenu();
   const unread = accounts.reduce((sum, a) => sum + a.unreadInboxCount, 0);
   const found = matches.accounts(accounts);
   return (
     <div className="flex flex-col gap-0.5">
       <SidebarRow
         className={cn("ps-1", matches.active && found === 0 && NO_MATCHES)}
+        scoped={onMail && scopeHas(scope, item)}
         dropTarget={dropTarget}
-        active={false}
         leading={
           <>
-            <span className="grid size-5 place-items-center">
-              <ChevronRightIcon className={cn("size-3.5 transition-transform", !collapsed && "rotate-90")} />
-            </span>
+            <RowIconButton
+              label={collapsed ? "Show accounts" : "Hide accounts"}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                toggle("ungrouped");
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <ChevronRightIcon className={cn("transition-transform", !collapsed && "rotate-90")} />
+            </RowIconButton>
             <ColorDot color={null} />
           </>
         }
         label={<span className="text-sidebar-muted-foreground">Ungrouped</span>}
+        emphasized={matches.active ? found > 0 : unread > 0}
         trailing={matches.active ? <MatchCount value={found} /> : <Count value={unread} />}
-        onActivate={() => toggle("ungrouped")}
+        actionsOpen={menu.open}
+        onContextMenu={menu.openAtPointer}
+        onClick={(event) => {
+          event.preventDefault();
+          pickScope(item, event);
+        }}
+        onActivate={() => pickScope(item, { ctrlKey: false, metaKey: false })}
       />
+      <UngroupedMenu menu={menu} />
       {!collapsed ? <AccountList accounts={accounts} groupKey={null} matches={matches} /> : null}
     </div>
   );

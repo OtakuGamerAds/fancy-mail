@@ -102,7 +102,13 @@ const NO_MOTION = "*, *::before, *::after { animation-duration: 0s !important; a
 
 /** One step, run in the page (plain script text: the bundle's helpers don't exist there). */
 const STEP_SCRIPT = `(async (step) => {
-  const find = (selector) => document.querySelector(selector);
+  // A selector, or text:<words> for the first item, button, link or sidebar row starting with them.
+  const find = (selector) => {
+    if (!selector.startsWith("text:")) return document.querySelector(selector);
+    const words = selector.slice(5).trim().toLowerCase();
+    const candidates = Array.from(document.querySelectorAll("[role=menuitem], button, a, [role=option], [role=link]"));
+    return candidates.find((c) => (c.textContent || "").trim().toLowerCase().startsWith(words)) || null;
+  };
   if (step.startsWith("key:")) {
     // key:mod+b — "mod" is Command on a Mac and Ctrl elsewhere, as the app reads it.
     const parts = step.slice(4).split("+");
@@ -119,9 +125,7 @@ const STEP_SCRIPT = `(async (step) => {
     return true;
   }
   if (step.startsWith("text:")) {
-    const words = step.slice(5).trim().toLowerCase();
-    const candidates = Array.from(document.querySelectorAll("[role=menuitem], button, a, [role=option]"));
-    const el = candidates.find((c) => (c.textContent || "").trim().toLowerCase().startsWith(words));
+    const el = find(step);
     if (!el) return false;
     el.click();
     return true;

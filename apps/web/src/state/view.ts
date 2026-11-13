@@ -2,7 +2,7 @@
  * What the current view is called and which query it runs. A view is a query (contracts'
  * viewQuery); the sidebar's search and the filter chip are added to it.
  */
-import { VIEW_TITLES, scopeItems, scopeQuery, viewQuery, type Account, type Bootstrap, type InboxTab, type ViewScope } from "@fancy-mail/contracts";
+import { UNGROUPED_ID, VIEW_TITLES, scopeItems, scopeQuery, viewQuery, type Account, type Bootstrap, type InboxTab, type ViewScope } from "@fancy-mail/contracts";
 
 import { directoryOf, type Directory } from "./queries";
 import { toMailView, viewScope, type ViewRef } from "./router";
@@ -34,7 +34,10 @@ export function scopeAccounts(scope: ViewScope, dir: Directory): Account[] {
   const groups = new Set<string>();
   const accounts = new Set<string>();
   for (const item of scopeItems(scope)) (item.type === "group" ? groups : accounts).add(item.id);
-  return dir.accounts.filter((a) => accounts.has(a.id) || (a.groupId !== null && groups.has(a.groupId)));
+  const ungrouped = groups.has(UNGROUPED_ID);
+  return dir.accounts.filter(
+    (a) => accounts.has(a.id) || (a.groupId !== null && groups.has(a.groupId)) || (ungrouped && (a.groupId === null || !dir.groupById.has(a.groupId))),
+  );
 }
 
 export function inScope(accountId: string, scope: ViewScope, dir: Directory): boolean {
@@ -44,7 +47,7 @@ export function inScope(accountId: string, scope: ViewScope, dir: Directory): bo
 export function scopeLabel(scope: ViewScope, bootstrap: Bootstrap | undefined): string | null {
   const dir = directoryOf(bootstrap);
   const names = scopeItems(scope).map((item) => {
-    if (item.type === "group") return dir.groupById.get(item.id)?.name ?? "Group";
+    if (item.type === "group") return item.id === UNGROUPED_ID ? "Ungrouped" : (dir.groupById.get(item.id)?.name ?? "Group");
     const account = dir.accountById.get(item.id);
     return account ? account.displayName || account.email : "Account";
   });

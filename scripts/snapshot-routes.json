@@ -61,6 +61,9 @@
     {"name": "flow-17-delete-for-good-menu", "hash": "#/trash", "click": ["right:[data-thread-id]"]},
     {"name": "flow-18-delete-for-good-dialog", "hash": "#/trash", "click": ["right:[data-thread-id]", "text:delete for good"]},
     {"name": "flow-19-delete-for-good-done", "hash": "#/trash", "click": ["right:[data-thread-id]", "text:delete for good", "[role=alertdialog] button[data-variant=destructive], [role=alertdialog] button:last-child"]},
+    {"name": "ungrouped-inbox", "hash": "#/g/none/inbox"},
+    {"name": "flow-20-ungrouped-click", "hash": "#/inbox", "click": ["text:ungrouped"]},
+    {"name": "flow-21-ungrouped-menu", "hash": "#/g/{group:Banking}/inbox", "click": ["right:text:ungrouped"]},
     {"name": "sidebar-hidden", "hash": "#/inbox", "click": ["key:mod+b"]}
   ]
 }
