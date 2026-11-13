@@ -69,6 +69,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # pnpm may restore Electron from its cache without running its download (the app and
+      # the screenshots run it; electron-builder downloads its own for other architectures).
+      - name: Install Electron
+        run: node node_modules/electron/install.js
 
       - name: Build
         shell: bash
@@ -88,7 +92,6 @@ jobs:
             (umask 077 && printf '%s' "$APPLE_API_KEY" > "$key_path")
             export APPLE_API_KEY="$key_path"
           fi
-          if [[ "${{ matrix.platform }}" != "mac" ]]; then unset CSC_LINK CSC_KEY_PASSWORD; fi
           node scripts/dist.mjs "${args[@]}"
           # Each Mac architecture writes its own latest-mac.yml; the release job merges them.
           if [[ "${{ matrix.platform }}" == "mac" && "${{ matrix.arch }}" == "x64" ]]; then

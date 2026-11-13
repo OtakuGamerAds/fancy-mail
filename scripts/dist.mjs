@@ -30,6 +30,9 @@ import path from "node:path";
 import { ROOT, fail, readJson, rootVersion, smokeServer } from "./lib.mjs";
 
 const PLATFORMS = { win32: "win", darwin: "mac" };
+// Signing settings that are set but empty (CI passes secrets that don't exist as "") would be
+// read as a certificate path; without signing, none of them may reach electron-builder.
+const SIGNING_ENV = ["CSC_LINK", "CSC_KEY_PASSWORD", "APPLE_API_KEY", "APPLE_API_KEY_ID", "APPLE_API_ISSUER"];
 const version = rootVersion();
 const electronVersion = readJson(path.join(ROOT, "node_modules", "electron", "package.json")).version;
 
@@ -60,16 +63,16 @@ if (platform !== "win" && platform !== "mac") fail(`Can't build for "${platform 
 if (arch !== "x64" && arch !== "arm64") fail(`Can't build for the "${arch}" architecture: use --arch x64 or --arch arm64.`);
 if (platform === "mac" && process.platform !== "darwin") fail("A Mac build needs a Mac (dmg and code signing are macOS tools). GitHub Actions builds it on release.");
 
-const signMac =
-  platform === "mac" && ["CSC_LINK", "CSC_KEY_PASSWORD", "APPLE_API_KEY", "APPLE_API_KEY_ID", "APPLE_API_ISSUER"].every((name) => process.env[name]);
+const signMac = platform === "mac" && SIGNING_ENV.every((name) => process.env[name]);
 
 // ── The electron-builder config: the shared file plus what this build needs ─────────────────
 
 function buildConfig() {
   const config = readJson(path.join(ROOT, "apps", "desktop", "electron-builder.json"));
   // The Electron that pnpm installed fits only this computer; anything else is downloaded.
-  if (PLATFORMS[process.platform] === platform && process.arch === arch) {
-    config.electronDist = path.join(ROOT, "node_modules", "electron", "dist");
+  const installed = path.join(ROOT, "node_modules", "electron", "dist");
+  if (PLATFORMS[process.platform] === platform && process.arch === arch && fs.existsSync(installed)) {
+    config.electronDist = installed;
   }
   if (platform === "mac") {
     config.mac = signMac
@@ -89,7 +92,9 @@ function buildConfig() {
 
 function step(title, command, commandArgs, options = {}) {
   console.log(`\n▸ ${title}`);
-  const result = spawnSync(command, commandArgs, { cwd: ROOT, stdio: "inherit", shell: options.shell ?? false, env: { ...process.env, ...options.env } });
+  const env = { ...process.env, ...options.env };
+  for (const name of SIGNING_ENV) if (!env[name] || !signMac) delete env[name];
+  const result = spawnSync(command, commandArgs, { cwd: ROOT, stdio: "inherit", shell: options.shell ?? false, env });
   if (result.status !== 0) fail(`${title} failed (exit code ${result.status ?? result.signal}).`);
 }
 
