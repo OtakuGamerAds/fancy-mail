@@ -24,8 +24,11 @@ function osxSign() {
 module.exports = async function sign(options) {
   const identity = process.env.FANCY_MAIL_MAC_SIGN_IDENTITY;
   if (!identity) throw new Error("FANCY_MAIL_MAC_SIGN_IDENTITY isn't set: no certificate to sign with.");
+  // electron-builder sets the options per file (entitlements, timestamp…); no timestamp on any.
+  const optionsForFile = options.optionsForFile;
   await osxSign().signApp({
     ...options,
+    optionsForFile: (file) => ({ ...(optionsForFile ? optionsForFile(file) : {}), timestamp: "none" }),
     identity,
     identityValidation: false,
     keychain: process.env.FANCY_MAIL_MAC_SIGN_KEYCHAIN || options.keychain,

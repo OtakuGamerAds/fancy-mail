@@ -7,7 +7,8 @@
     "  {agentDraftThread}                                 the conversation with a draft an agent wrote",
     "`click` is a CSS selector clicked once the view has settled (before the capture), or a list of steps:",
     "  a selector, right:<selector> (context menu), swipe:<selector>, text:<words> (a button or item",
-    "  starting with them), key:mod+b (mod is Command on a Mac, Ctrl elsewhere).",
+    "  starting with them), key:mod+b (mod is Command on a Mac, Ctrl elsewhere), modclick:<selector or text:…>",
+    "  (Ctrl+click, Command+click on a Mac).",
     "sidebar-hidden stays last: the hidden sidebar is remembered for the routes after it."
   ],
   "routes": [
@@ -64,6 +65,10 @@
     {"name": "ungrouped-inbox", "hash": "#/g/none/inbox"},
     {"name": "flow-20-ungrouped-click", "hash": "#/inbox", "click": ["text:ungrouped"]},
     {"name": "flow-21-ungrouped-menu", "hash": "#/g/{group:Banking}/inbox", "click": ["right:text:ungrouped"]},
+    {"name": "flow-22-label-click", "hash": "#/inbox", "click": ["text:invoices"]},
+    {"name": "flow-23-label-click-again", "hash": "#/inbox", "click": ["text:invoices", "text:invoices"]},
+    {"name": "flow-24-labels-several", "hash": "#/inbox", "click": ["text:invoices", "modclick:text:newsletters"]},
+    {"name": "flow-25-label-x", "hash": "#/inbox", "click": ["text:invoices", "button[aria-label='Stop showing this label']"]},
     {"name": "sidebar-hidden", "hash": "#/inbox", "click": ["key:mod+b"]}
   ]
 }

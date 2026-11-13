@@ -124,6 +124,14 @@ const STEP_SCRIPT = `(async (step) => {
     }));
     return true;
   }
+  if (step.startsWith("modclick:")) {
+    // Ctrl+click, or Command+click on a Mac.
+    const el = find(step.slice(9));
+    if (!el) return false;
+    const mac = /mac/i.test(navigator.platform);
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ctrlKey: !mac, metaKey: mac }));
+    return true;
+  }
   if (step.startsWith("text:")) {
     const el = find(step);
     if (!el) return false;

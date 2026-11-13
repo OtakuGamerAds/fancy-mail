@@ -38,6 +38,19 @@ if [[ -z "$identity" ]]; then
   echo "The certificate in MAC_SELF_SIGN_P12 has no Fancy Mail code-signing identity." >&2
   exit 1
 fi
+# Sign a copy of a small program now, so a certificate codesign can't use fails here, clearly.
+probe="$RUNNER_TEMP/fancy-mail-sign-probe"
+cp /usr/bin/true "$probe"
+if ! codesign --force --sign "$identity" --keychain "$keychain" --timestamp=none "$probe"; then
+  echo "--- what macOS sees ---"
+  security find-identity -p codesigning "$keychain" || true
+  security find-identity -v -p codesigning || true
+  security verify-cert -c "$cert" -p codeSign || true
+  security dump-trust-settings -d || true
+  echo "codesign can't sign with Fancy Mail's certificate." >&2
+  exit 1
+fi
+codesign -dv "$probe" 2>&1 | grep -E "^Authority|^Signature" || true
 echo "FANCY_MAIL_MAC_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
 echo "FANCY_MAIL_MAC_SIGN_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
 echo "FANCY_MAIL_MAC_SIGN_CERT=$cert" >> "$GITHUB_ENV"
