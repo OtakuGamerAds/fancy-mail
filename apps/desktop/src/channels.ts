@@ -12,4 +12,8 @@ export const CHANNELS = {
   updateDownload: "fm:update-download",
   updateInstall: "fm:update-install",
   updateChanged: "fm:update-changed",
+  /** macOS: the window entered or left full screen (the window buttons hide there). */
+  fullscreenChanged: "fm:fullscreen-changed",
+  /** A menu item the page carries out (macOS's app menu: "Settings…"). */
+  menuAction: "fm:menu-action",
 } as const;

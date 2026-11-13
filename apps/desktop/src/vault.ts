@@ -2,7 +2,7 @@
  * The key for the credentials vault: 32 random bytes the server uses for AES-256-GCM.
  *
  * Installed app: stored as <dataDir>/vault-key.bin, encrypted with the operating system's
- * key store (safeStorage: DPAPI on Windows), so a copy of the data folder alone does not
+ * key store (safeStorage: DPAPI on Windows, the Keychain on macOS), so a copy of the data folder alone does not
  * reveal any password. Without safeStorage the app refuses to start rather than keep the key
  * in plain text.
  *

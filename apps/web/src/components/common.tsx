@@ -18,6 +18,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { colorForAddress, initialOf } from "~/lib/addresses";
 import { cn } from "~/lib/utils";
 import { useUi } from "~/state/ui";
+import { shortcutLabel } from "~/lib/keys";
 
 // ── Avatars and dots ────────────────────────────────────────────────────────────────────────
 
@@ -180,7 +181,7 @@ export function IconButton({
       <TooltipPopup side={side}>
         <span className="flex items-center gap-2">
           {label}
-          {shortcut ? <span className="text-muted-foreground">{shortcut}</span> : null}
+          {shortcut ? <span className="text-muted-foreground">{shortcutLabel(shortcut)}</span> : null}
         </span>
       </TooltipPopup>
     </Tooltip>
@@ -267,14 +268,20 @@ export function SectionTitle({ children, className }: { children: ReactNode; cla
   return <h2 className={cn("font-medium text-sm text-foreground", className)}>{children}</h2>;
 }
 
-/** Brings the sidebar back after Ctrl+B hid it (nothing while it is shown). */
+/**
+ * Brings the sidebar back after Ctrl+B hid it (nothing while it is shown). It is then the first
+ * thing in the top strip, so on a Mac it keeps clear of the window buttons (traffic lights).
+ */
 export function ShowSidebarButton() {
   const collapsed = useUi((s) => s.sidebarCollapsed);
   const toggle = useUi((s) => s.toggleSidebar);
   if (!collapsed) return null;
   return (
-    <IconButton label="Show sidebar" shortcut="Ctrl+B" onClick={toggle}>
-      <PanelLeftOpenIcon />
-    </IconButton>
+    <>
+      <span aria-hidden className="shrink-0" style={{ width: "max(0px, calc(var(--desktop-window-controls-inset, 0px) - 0.75rem))" }} />
+      <IconButton label="Show sidebar" shortcut="Ctrl+B" onClick={toggle}>
+        <PanelLeftOpenIcon />
+      </IconButton>
+    </>
   );
 }

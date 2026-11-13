@@ -18,7 +18,7 @@ import { Reader } from "~/components/reader/Reader";
 import { SettingsView } from "~/components/settings/SettingsView";
 import { ShortcutsDialog } from "~/components/ShortcutsDialog";
 import { Sidebar } from "~/components/sidebar/Sidebar";
-import { useUpdateNotices } from "~/components/sidebar/UpdateButton";
+import { checkForUpdatesFromMenu, useUpdateNotices } from "~/components/sidebar/UpdateButton";
 import { Spinner } from "~/components/ui/spinner";
 import { Toaster } from "~/components/ui/toast";
 import { TooltipProvider } from "~/components/ui/tooltip";
@@ -29,7 +29,7 @@ import { useDelayed } from "~/hooks/useDelayed";
 import { useElementWidth } from "~/hooks/useElementWidth";
 import { noteAgentActivity } from "~/state/events";
 import { queryClient, useActivity, useBootstrap } from "~/state/queries";
-import { navigateBackTo, onRouteChange, startRouter, type ViewRef } from "~/state/router";
+import { navigate, navigateBackTo, onRouteChange, startRouter, type ViewRef } from "~/state/router";
 import { LIST_DEFAULT, LIST_MAX, LIST_MIN, useUi } from "~/state/ui";
 
 export function App() {
@@ -76,6 +76,17 @@ function useTraySetting() {
   }, [closeToTray]);
 }
 
+/** The macOS app menu's items the page carries out ("Settings…", "Check for Updates…"). */
+function useMenuActions() {
+  useEffect(() => {
+    const off = bridge()?.onMenuAction?.((action) => {
+      if (action === "settings") navigate({ page: "settings", section: "accounts" });
+      else if (action === "check-for-updates") checkForUpdatesFromMenu();
+    });
+    return typeof off === "function" ? off : undefined;
+  }, []);
+}
+
 /** The window title carries the unread inbox count (taskbar, alt-tab). */
 function useWindowTitle() {
   const accounts = useBootstrap().data?.accounts;
@@ -88,6 +99,7 @@ function useWindowTitle() {
 function Shell() {
   useRouterSync();
   useTraySetting();
+  useMenuActions();
   useWindowTitle();
   useKeyboard();
   useAgentActivityDot();

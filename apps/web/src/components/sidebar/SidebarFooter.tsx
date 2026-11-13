@@ -13,6 +13,7 @@ import { useBootstrap } from "~/state/queries";
 import { navigate } from "~/state/router";
 import { useUi } from "~/state/ui";
 import { sidebarRowClass } from "./SidebarRow";
+import { isModKey } from "~/lib/keys";
 
 export function SidebarFooter() {
   const { data: bootstrap } = useBootstrap();
@@ -56,8 +57,8 @@ export function SidebarFooter() {
           data-active={routePage === "activity" ? "true" : undefined}
           className={cn(sidebarRowClass, "flex-1")}
           onClick={(event) => {
-            // Ctrl/middle click opens the full page; a plain click the side sheet.
-            if (event.ctrlKey || event.metaKey) navigate({ page: "activity" });
+            // Ctrl-click (⌘ on a Mac) opens the full page; a plain click the side sheet.
+            if (isModKey(event)) navigate({ page: "activity" });
             else setSheet(true);
           }}
         >

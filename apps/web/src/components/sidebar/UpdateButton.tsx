@@ -71,6 +71,7 @@ function label(state: UpdateState): string {
     case "checking":
       return "Checking for updates…";
     case "available":
+      if (state.manual) return state.message ?? `Update ${version ?? ""} available. Click to download it.`.replace("  ", " ");
       return state.message ? `${state.message} Click to try again.` : `Update ${version ?? ""} available. Click to download.`.replace("  ", " ");
     case "downloading": {
       const percent = percentOf(state);
@@ -87,6 +88,14 @@ function label(state: UpdateState): string {
 
 /** A check the person asked for: its answer is said even when there is nothing new. */
 let manualCheck = false;
+
+/** "Check for Updates…" in the macOS app menu: the same check as the button's. */
+export function checkForUpdatesFromMenu(): void {
+  const update = bridge()?.update;
+  if (!update) return;
+  manualCheck = true;
+  void update.check();
+}
 
 function act(state: UpdateState): void {
   const update = bridge()?.update;
@@ -182,9 +191,11 @@ export function useUpdateNotices(): void {
         id: "update",
         type: "info",
         title: `Fancy Mail ${version} is available`,
-        description: "Your mail and accounts stay as they are.",
+        description: state.manual
+          ? "Download it, open it and drag Fancy Mail to Applications. Your mail and accounts stay as they are."
+          : "Your mail and accounts stay as they are.",
         duration: 0,
-        actions: [{ label: "Update", primary: true, onClick: () => void bridge()?.update?.download() }],
+        actions: [{ label: state.manual ? "Download" : "Update", primary: true, onClick: () => void bridge()?.update?.download() }],
       });
     } else if (manualCheck && (state.status === "up-to-date" || phase === "error")) {
       manualCheck = false;

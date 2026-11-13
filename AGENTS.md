@@ -68,7 +68,8 @@ packages/contracts  zod schemas and types for everything crossing a process boun
 - `pnpm test` — vitest, run on Electron's Node (`scripts/electron-node.mjs`), because the
   server needs `node:sqlite` with FTS5, which the system Node may not have.
 - `pnpm typecheck`, `pnpm build`, `pnpm snapshot` (renders the main views to
-  `snapshots/latest/*.png` for a visual check), `pnpm dist`, `pnpm release`.
+  `snapshots/latest/*.png` for a visual check), `pnpm dist` (this computer's installer;
+  `--platform mac --arch x64` and so on on a Mac), `pnpm release`.
 - Server code runs as TypeScript directly (Node's type stripping): only erasable syntax (no
   `enum`, no parameter properties, no namespaces), `import type` for types, and `.ts`
   extensions on relative imports.
@@ -80,9 +81,19 @@ update button; checked 10 s after start and every 4 minutes). A change reaches t
 
 1. it is committed on `main` with typecheck and tests passing;
 2. `"version"` is bumped in all five package.json files (root, apps/*, packages/contracts);
-3. that is committed and pushed, then `pnpm release` (tags vX.Y.Z, builds, uploads the
-   installer, its .blockmap and latest.yml). Check the feed afterwards:
-   https://github.com/OtakuGamerAds/fancy-mail/releases/latest/download/latest.yml
+3. that is committed and pushed, then `pnpm release`. It tags vX.Y.Z and pushes the tag;
+   `.github/workflows/release.yml` then checks the code, builds Windows x64 and macOS arm64 and
+   x64 (a Mac build needs a Mac, so this runs on GitHub), starts each app once, and publishes
+   the release with the installers, the update files (latest.yml, latest-mac.yml, .zip,
+   .blockmap) and the .dmgs. `pnpm release` waits for that run and checks the files. Feeds:
+   https://github.com/OtakuGamerAds/fancy-mail/releases/latest/download/latest.yml (and
+   latest-mac.yml).
+
+Windows and macOS are one app: platform differences stay in the desktop shell (apps/desktop:
+title bar, menu, tray or Dock, updates) and in a few web helpers (`lib/keys.ts`: ⌘ on a Mac;
+`--desktop-window-controls-inset` for the traffic lights), the way T3 Code does it. Write
+shortcuts the Windows way ("Ctrl+Shift+S") through `shortcutLabel`/`shortcutKeys`, and check
+the modifier with `isModKey`.
 
 Because it is public, nothing personal goes in: demo data stays fictional (`.example`
 domains, made-up people), no real names, addresses, paths or tokens.
@@ -90,7 +101,7 @@ domains, made-up people), no real names, addresses, paths or tokens.
 ## The ways to hurt yourself
 
 1. **Touching the user's real data.** The installed app keeps its data in
-   `%APPDATA%/Fancy Mail`. Never point a dev server, a test or a script at it. Dev uses
+   `%APPDATA%/Fancy Mail` (`~/Library/Application Support/Fancy Mail` on a Mac). Never point a dev server, a test or a script at it. Dev uses
    `.dev-data/`, tests use a temp dir.
 2. **Killing by pattern.** Only kill a process you started, by the PID you captured.
 3. **Leaking secrets.** Never log passwords, OAuth tokens, the vault key or the MCP token.

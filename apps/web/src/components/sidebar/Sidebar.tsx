@@ -116,7 +116,12 @@ function SidebarTop() {
   const composing = useUi((s) => s.compose !== null && s.compose.draftId === null && s.compose.threadId === null);
   return (
     <div className="flex shrink-0 flex-col gap-1 px-[var(--sidebar-content-inset)] pb-1">
-      <div data-drag-region className="app-drag flex h-[var(--header-height)] items-center gap-2 ps-2.5">
+      <div
+        data-drag-region
+        className="app-drag flex h-[var(--header-height)] items-center gap-2"
+        // On a Mac the window buttons sit here (the shell sets the inset; 0 elsewhere and in full screen).
+        style={{ paddingInlineStart: "max(0.625rem, calc(var(--desktop-window-controls-inset, 0px) - var(--sidebar-content-inset)))" }}
+      >
         <img src="./favicon.png" alt="" className="size-5 rounded-[5px]" draggable={false} />
         <span className="font-semibold text-sm tracking-tight text-sidebar-foreground">Fancy Mail</span>
       </div>

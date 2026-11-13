@@ -4,7 +4,6 @@
   "productName": "Fancy Mail",
   "copyright": "Copyright © 2026 OtakuGamerAds",
   "electronVersion": "44.10.2",
-  "electronDist": "../../node_modules/electron/dist",
   "npmRebuild": false,
   "asar": true,
   "directories": {
@@ -28,6 +27,20 @@
     "deleteAppDataOnUninstall": false,
     "shortcutName": "Fancy Mail",
     "uninstallDisplayName": "Fancy Mail"
+  },
+  "mac": {
+    "target": ["dmg", "zip"],
+    "icon": "build/icon.icns",
+    "category": "public.app-category.productivity",
+    "artifactName": "Fancy-Mail-${version}-${arch}.${ext}",
+    "darkModeSupport": true,
+    "extendInfo": {
+      "NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac": true
+    }
+  },
+  "dmg": {
+    "title": "Fancy Mail ${version}",
+    "writeUpdateInfo": false
   },
   "publish": [
     {

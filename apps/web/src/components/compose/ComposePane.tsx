@@ -27,6 +27,7 @@ import { AttachButton, AttachmentChips, COMPOSER_SURFACE, QuoteFold, SaveStatus 
 import { RecipientField, invalidAddresses } from "./RecipientField";
 import { signatureText } from "./replyDefaults";
 import { fieldsFromDraft, hasContent, useDraftEditor, type DraftFields } from "./useDraftEditor";
+import { isModKey, shortcutLabel } from "~/lib/keys";
 
 export function ComposePane({ compose, fullWidth }: { compose: ComposeState; fullWidth: boolean }) {
   return <ComposeLoader key={compose.session} compose={compose} fullWidth={fullWidth} />;
@@ -195,7 +196,7 @@ function ComposeForm({ compose, draft, fullWidth }: { compose: ComposeState; dra
     <div
       className="flex h-full min-w-0 flex-col"
       onKeyDown={(event) => {
-        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        if (event.key === "Enter" && isModKey(event)) {
           event.preventDefault();
           void send();
         } else if (event.key === "Escape" && !event.defaultPrevented && !document.querySelector("[data-slot=select-popup], [data-slot=popover-popup]")) {
@@ -289,7 +290,7 @@ function ComposeForm({ compose, draft, fullWidth }: { compose: ComposeState; dra
                   disabled={editor.sending || editor.uploading.length > 0 || !fields.accountId}
                   onSend={(until) => void send(until)}
                 />
-                <Button size="sm" disabled={editor.sending || editor.uploading.length > 0 || !fields.accountId} onClick={() => void send()} title="Send (Ctrl+Enter)">
+                <Button size="sm" disabled={editor.sending || editor.uploading.length > 0 || !fields.accountId} onClick={() => void send()} title={`Send (${shortcutLabel("Ctrl+Enter")})`}>
                   {editor.sending ? <Spinner size="sm" /> : <SendHorizontalIcon />}
                   Send
                 </Button>

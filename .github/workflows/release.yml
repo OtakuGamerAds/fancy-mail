@@ -1,0 +1,185 @@
+name: Release
+
+# Builds Fancy Mail for Windows and macOS and publishes them as one GitHub release, the way
+# T3 Code's release.yml and release-desktop.yml do (MIT License — see
+# THIRD_PARTY_LICENSE_T3CODE.txt): one build script for every platform (scripts/dist.mjs), one
+# job per platform and architecture, the Mac update manifests merged into one, and the release
+# published only once every file is on it (installed apps update from the latest release).
+#
+#   a tag vX.Y.Z (pnpm release pushes it)   build, check, publish the release
+#   "Run workflow" on the Actions tab       build and check only; the files stay on the run
+#
+# Mac signing: with the secrets CSC_LINK (the Developer ID .p12, base64), CSC_KEY_PASSWORD,
+# APPLE_API_KEY (the .p8 key's text), APPLE_API_KEY_ID and APPLE_API_ISSUER the Mac app is
+# signed and notarized, and updates itself; without them it is signed ad hoc (README: macOS).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Typecheck and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: The tag is the version in package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  build:
+    name: Build ${{ matrix.label }}
+    needs: check
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { label: Windows x64, runner: windows-latest, platform: win, arch: x64, check: true, app: release/win-unpacked }
+          - { label: macOS arm64, runner: macos-latest, platform: mac, arch: arm64, check: true, app: "release/mac-arm64/Fancy Mail.app" }
+          # Built on the same Apple Silicon runner; Intel Macs run it. (Nothing native to rebuild.)
+          - { label: macOS x64, runner: macos-latest, platform: mac, arch: x64, check: false, app: "" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          args=(--platform "${{ matrix.platform }}" --arch "${{ matrix.arch }}")
+          if [[ "${{ matrix.check }}" == "true" ]]; then args+=(--smoke); fi
+          if [[ "${{ matrix.platform }}" == "mac" && -n "${APPLE_API_KEY:-}" ]]; then
+            # electron-builder takes the notarization key as a file.
+            key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+            (umask 077 && printf '%s' "$APPLE_API_KEY" > "$key_path")
+            export APPLE_API_KEY="$key_path"
+          fi
+          if [[ "${{ matrix.platform }}" != "mac" ]]; then unset CSC_LINK CSC_KEY_PASSWORD; fi
+          node scripts/dist.mjs "${args[@]}"
+          # Each Mac architecture writes its own latest-mac.yml; the release job merges them.
+          if [[ "${{ matrix.platform }}" == "mac" && "${{ matrix.arch }}" == "x64" ]]; then
+            mv release/latest-mac.yml release/latest-mac-x64.yml
+          fi
+
+      - name: Launch check
+        if: matrix.check
+        shell: bash
+        run: node scripts/launch-check.mjs --app "${{ matrix.app }}" --out launch-check
+
+      - name: Screenshots of the app's views
+        if: matrix.platform == 'mac' && matrix.check
+        run: pnpm snapshot --no-build inbox shortcuts palette settings-accounts flow-5-context thread-html sidebar-hidden
+
+      - name: Upload the launch check and screenshots
+        if: always() && matrix.check
+        uses: actions/upload-artifact@v4
+        with:
+          name: checks-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            launch-check
+            snapshots/latest
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.blockmap
+            release/latest*.yml
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish the release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: build-*
+          merge-multiple: true
+          path: release-assets
+
+      # electron-updater reads one latest-mac.yml and picks the file for its own architecture.
+      - name: Merge the Mac update manifests
+        run: |
+          node scripts/update-manifest.mjs merge release-assets/latest-mac.yml release-assets/latest-mac-x64.yml
+          rm release-assets/latest-mac-x64.yml
+          cat release-assets/latest-mac.yml
+
+      - name: Check the files
+        shell: bash
+        run: |
+          set -euo pipefail
+          v="${GITHUB_REF_NAME#v}"
+          for f in "Fancy-Mail-Setup-$v.exe" "Fancy-Mail-Setup-$v.exe.blockmap" latest.yml \
+                   "Fancy-Mail-$v-arm64.dmg" "Fancy-Mail-$v-arm64.zip" "Fancy-Mail-$v-arm64.zip.blockmap" \
+                   "Fancy-Mail-$v-x64.dmg" "Fancy-Mail-$v-x64.zip" "Fancy-Mail-$v-x64.zip.blockmap" latest-mac.yml; do
+            test -f "release-assets/$f" || { echo "Missing $f" >&2; exit 1; }
+          done
+          grep -q "Fancy-Mail-Setup-$v.exe" release-assets/latest.yml
+          grep -q "Fancy-Mail-$v-arm64.zip" release-assets/latest-mac.yml
+          grep -q "Fancy-Mail-$v-x64.zip" release-assets/latest-mac.yml
+          ls -la release-assets
+
+      # A draft first, published once everything is uploaded: installed apps read the latest
+      # published release, so they never see one with files missing.
+      - name: Publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$tag" --notes ""
+          fi
+          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" --clobber release-assets/*
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest

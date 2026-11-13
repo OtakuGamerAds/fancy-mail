@@ -5,6 +5,11 @@
  * key, and shows the web app the server (or Vite, in dev) serves. It adds what a browser
  * can't: the tray, notifications, opening attachments with their program, and updates.
  *
+ * Windows and macOS share all of it; where a Mac app behaves differently it follows T3 Code
+ * (apps/desktop/src/app/DesktopLifecycle.ts, window/DesktopApplicationMenu.ts; MIT License —
+ * see THIRD_PARTY_LICENSE_T3CODE.txt): an app menu, no tray (the Dock), and closing the window
+ * keeps Fancy Mail running until Quit.
+ *
  *   FANCY_MAIL_DEV=1        development: data in <repo>/.dev-data, the server from source,
  *                           the UI from Vite on http://localhost:5190
  *   FANCY_MAIL_SNAPSHOT=1   render views to PNGs and quit (scripts/snapshot.mjs)
@@ -22,9 +27,10 @@ import { readPlan, snapshotMain } from "./snapshot.ts";
 import { createTray } from "./tray.ts";
 import { initUpdater } from "./updater.ts";
 import { VaultKeyError, loadDevKey, loadProtectedKey } from "./vault.ts";
-import { createMainWindow, preloadPath, showWindow, statusPageUrl, windowIcon } from "./window.ts";
+import { createMainWindow, preloadPath, showWindow, statusPageUrl, windowIcon, zoomWindow } from "./window.ts";
 
 const PRELOAD = preloadPath(__dirname);
+const IS_MAC = process.platform === "darwin";
 /** If the server isn't ready by then, the window opens with a short "starting" note. */
 const SLOW_START_MS = 2500;
 
@@ -83,39 +89,68 @@ function restrictPermissions(origins: () => string[]): void {
   });
 }
 
+/** A menu item the page carries out, with the window brought up first. */
+function menuAction(action: "settings" | "check-for-updates"): void {
+  openWindow();
+  sendToWindow(CHANNELS.menuAction, action);
+}
+
 /**
- * No menu bar is shown; the menu only provides the shortcuts. Ctrl+R and Ctrl+W are left to
- * the app (Reply, Close), so reloading is F5 in development only.
+ * Windows shows no menu bar; the menu only provides the shortcuts. Ctrl+R and Ctrl+W are left
+ * to the app, so reloading is F5 in development only. macOS always has a menu bar: there it is
+ * the usual app menu (About, Settings…, Hide, Quit), File, Edit, View and Window.
  */
 function applicationMenu(): void {
+  const zoom = (direction: "in" | "out" | "reset") => () => zoomWindow(windowAlive(), direction);
   const view: MenuItemConstructorOptions[] = [
-    { role: "zoomIn", accelerator: "CmdOrCtrl+=" },
-    { role: "zoomIn", accelerator: "CmdOrCtrl+Plus", visible: false },
-    { role: "zoomOut", accelerator: "CmdOrCtrl+-" },
-    { role: "resetZoom", accelerator: "CmdOrCtrl+0" },
+    { label: "Zoom In", accelerator: "CmdOrCtrl+=", click: zoom("in") },
+    { label: "Zoom In", accelerator: "CmdOrCtrl+Plus", visible: false, click: zoom("in") },
+    { label: "Zoom Out", accelerator: "CmdOrCtrl+-", click: zoom("out") },
+    { label: "Actual Size", accelerator: "CmdOrCtrl+0", click: zoom("reset") },
     { type: "separator" },
-    { role: "togglefullscreen", accelerator: "F11" },
-    { role: "toggleDevTools", accelerator: "CmdOrCtrl+Shift+I" },
+    IS_MAC ? { role: "togglefullscreen" } : { role: "togglefullscreen", accelerator: "F11" },
+    { role: "toggleDevTools", accelerator: IS_MAC ? "Alt+Command+I" : "Ctrl+Shift+I" },
   ];
   if (IS_DEV) view.push({ role: "reload", accelerator: "F5" }, { role: "forceReload", accelerator: "Shift+F5" });
-  Menu.setApplicationMenu(
-    Menu.buildFromTemplate([
+  const edit: MenuItemConstructorOptions[] = [
+    { role: "undo" },
+    { role: "redo" },
+    { type: "separator" },
+    { role: "cut" },
+    { role: "copy" },
+    { role: "paste" },
+    { role: "pasteAndMatchStyle" },
+    { role: "selectAll" },
+  ];
+  if (IS_MAC) edit.push({ type: "separator" }, { label: "Speech", submenu: [{ role: "startSpeaking" }, { role: "stopSpeaking" }] });
+
+  const template: MenuItemConstructorOptions[] = [];
+  if (IS_MAC) {
+    template.push(
       {
-        label: "Edit",
+        label: "Fancy Mail",
         submenu: [
-          { role: "undo" },
-          { role: "redo" },
+          { role: "about", label: "About Fancy Mail" },
+          { label: "Check for Updates…", click: () => menuAction("check-for-updates") },
           { type: "separator" },
-          { role: "cut" },
-          { role: "copy" },
-          { role: "paste" },
-          { role: "pasteAndMatchStyle" },
-          { role: "selectAll" },
+          { label: "Settings…", accelerator: "Command+,", click: () => menuAction("settings") },
+          { type: "separator" },
+          { role: "services" },
+          { type: "separator" },
+          { role: "hide", label: "Hide Fancy Mail" },
+          { role: "hideOthers" },
+          { role: "unhide" },
+          { type: "separator" },
+          { role: "quit", label: "Quit Fancy Mail" },
         ],
       },
-      { label: "View", submenu: view },
-    ]),
-  );
+      // Command+W closes the window (Fancy Mail keeps running); the app itself has no Command+W.
+      { label: "File", submenu: [{ role: "close", label: "Close Window" }] },
+    );
+  }
+  template.push({ label: "Edit", submenu: edit }, { label: "View", submenu: view });
+  if (IS_MAC) template.push({ role: "windowMenu", submenu: [{ role: "minimize" }, { role: "zoom" }, { type: "separator" }, { role: "front" }] });
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
 // ── The window and what it shows ────────────────────────────────────────────────────────────
@@ -196,9 +231,18 @@ function createWindow(): BrowserWindow {
   });
 
   created.on("close", (event) => {
-    if (quitting || !closeToTray || !tray) return;
+    if (quitting) return;
+    // A Mac app keeps running when its window closes (the Dock brings it back); on Windows the
+    // tray does that, unless it is turned off in Settings.
+    if (!IS_MAC && (!closeToTray || !tray)) return;
     event.preventDefault();
-    created.hide();
+    if (IS_MAC && created.isFullScreen()) {
+      // Hiding a full-screen window leaves an empty Space behind: leave full screen first.
+      created.once("leave-full-screen", () => created.hide());
+      created.setFullScreen(false);
+    } else {
+      created.hide();
+    }
   });
   created.on("closed", () => {
     win = null;
@@ -260,7 +304,8 @@ function startApp(): void {
   });
 
   createWindow();
-  tray = createTray({ open: openWindow, quit: () => app.quit() });
+  // macOS has the Dock instead (clicking it brings the window back: "activate").
+  if (!IS_MAC) tray = createTray({ open: openWindow, quit: () => app.quit() });
 
   const { entry, args } = serverCommand(dataDir);
   server = new ServerSupervisor({
@@ -333,13 +378,19 @@ function main(): void {
     app.quit();
     return;
   }
-  app.setAppUserModelId(IS_DEV ? process.execPath : "com.otakugamer.fancymail");
+  // Windows groups the taskbar button and notifications by this id.
+  if (process.platform === "win32") app.setAppUserModelId(IS_DEV ? process.execPath : "com.otakugamer.fancymail");
   app.on("second-instance", openWindow);
   app.whenReady().then(startApp);
 
   app.on("window-all-closed", () => {
     // With the tray, closing hides the window instead; this runs when close-to-tray is off.
-    app.quit();
+    // A Mac app stays running with no window, until Quit.
+    if (!IS_MAC) app.quit();
+  });
+  // macOS: the Dock icon was clicked (or the app opened again): bring the window back.
+  app.on("activate", () => {
+    if (!quitting) openWindow();
   });
   app.on("before-quit", (event) => {
     quitting = true;

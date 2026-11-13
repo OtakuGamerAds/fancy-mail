@@ -17,6 +17,7 @@ import { refreshBootstrap, updateSettings } from "~/state/actions";
 import { qk, queryClient, useBootstrap } from "~/state/queries";
 import { copyText } from "./AgentsSettings";
 import { SettingsRow, SettingsSection } from "./layout";
+import { IS_MAC } from "~/lib/keys";
 
 const REPO_URL = "https://github.com/OtakuGamerAds/fancy-mail";
 
@@ -111,7 +112,7 @@ export function ReadingSettings() {
         {isDesktop() ? (
           <SettingsRow
             title="New mail notifications"
-            description="A Windows notification when mail lands in Primary while the window isn't in front."
+            description="A notification when mail lands in Primary while the window isn't in front."
             control={
               <Switch
                 checked={settings.notifications}
@@ -121,7 +122,8 @@ export function ReadingSettings() {
             }
           />
         ) : null}
-        {isDesktop() ? (
+        {/* A Mac keeps Fancy Mail running in the Dock when its window closes, like every Mac app. */}
+        {isDesktop() && !IS_MAC ? (
           <SettingsRow
             title="Keep running in the tray"
             description="Closing the window keeps Fancy Mail syncing in the background."

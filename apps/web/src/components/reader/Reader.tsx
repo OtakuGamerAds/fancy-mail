@@ -47,6 +47,7 @@ import { formatRoute, type Route } from "~/state/router";
 import { useUi } from "~/state/ui";
 import { DraftCard } from "./DraftCard";
 import { MessageCard } from "./MessageCard";
+import { shortcutLabel } from "~/lib/keys";
 
 export function Reader({ threadId, onClose, fullWidth }: { threadId: string; onClose(): void; fullWidth: boolean }) {
   const thread = useThread(threadId);
@@ -286,7 +287,7 @@ function Toolbar({ detail, onClose }: { detail: ThreadDetail; onClose(): void })
           variant="ghost-muted"
           size="compact"
           className="me-1"
-          title={`${settled ? "Un-settle" : "Settle"} (Ctrl+Shift+S)`}
+          title={`${settled ? "Un-settle" : "Settle"} (${shortcutLabel("Ctrl+Shift+S")})`}
           onClick={() => void runThreadCommand(settled ? "unsettle" : "settle", ids)}
         >
           {settled ? <Undo2Icon /> : <CheckIcon />}
@@ -353,7 +354,7 @@ function Toolbar({ detail, onClose }: { detail: ThreadDetail; onClose(): void })
             <MenuItem onClick={() => void runThreadCommand(state === "pinned" ? "unpin" : "pin", ids)}>
               <PinIcon />
               {state === "pinned" ? "Unpin" : "Pin to the top"}
-              <MenuShortcut>Ctrl+Shift+P</MenuShortcut>
+              <MenuShortcut>{shortcutLabel("Ctrl+Shift+P")}</MenuShortcut>
             </MenuItem>
           ) : null}
           <MenuItem

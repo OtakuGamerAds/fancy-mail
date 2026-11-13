@@ -13,10 +13,19 @@
  *
  * The state carries both the short names the brief uses (version, percent, status "ready")
  * and the explicit ones (availableVersion, downloadedVersion, downloadPercent).
+ *
+ * macOS installs an update only when the app carries a Developer ID signature (Squirrel.Mac
+ * checks the new version against it). A build without one (ad hoc, see scripts/dist.mjs) still
+ * finds updates, but its update button opens the new .dmg in the browser instead
+ * (`manual: true`).
  */
+import { execFile } from "node:child_process";
+import path from "node:path";
+
 import { app } from "electron";
 
 import { log } from "./log.ts";
+import { openExternally } from "./window.ts";
 
 export type UpdateStatus = "disabled" | "idle" | "checking" | "up-to-date" | "available" | "downloading" | "ready" | "error";
 
@@ -33,6 +42,8 @@ export interface UpdateState {
   downloadPercent: number | null;
   message: string | null;
   errorContext: "check" | "download" | "install" | null;
+  /** macOS without a Developer ID signature: "download" opens the .dmg in the browser. */
+  manual: boolean;
 }
 
 const FEED_URL = "https://github.com/OtakuGamerAds/fancy-mail/releases/latest/download";
@@ -50,6 +61,7 @@ let state: UpdateState = {
   downloadPercent: null,
   message: null,
   errorContext: null,
+  manual: false,
 };
 
 let notify: (state: UpdateState) => void = () => {};
@@ -122,7 +134,17 @@ export async function checkForUpdate(): Promise<UpdateState> {
   return state;
 }
 
+/** The release's .dmg for this Mac (scripts/dist.mjs names it Fancy-Mail-<version>-<arch>.dmg). */
+function dmgUrl(version: string): string {
+  return `${FEED_URL}/Fancy-Mail-${version}-${process.arch === "arm64" ? "arm64" : "x64"}.dmg`;
+}
+
 export async function downloadUpdate(): Promise<UpdateState> {
+  if (state.manual && state.enabled && state.availableVersion) {
+    openExternally(dmgUrl(state.availableVersion));
+    setState({ message: "The new version is downloading in your browser. Open it and drag Fancy Mail to Applications.", errorContext: null });
+    return state;
+  }
   if (!updater || !state.enabled || downloading || !state.availableVersion || state.downloadedVersion) return state;
   downloading = true;
   setState({ status: "downloading", downloadPercent: 0, message: null, errorContext: null });
@@ -148,9 +170,30 @@ export async function installUpdate(beforeQuit: () => Promise<void>): Promise<Up
   return state;
 }
 
+/**
+ * Whether this Mac app carries a Developer ID signature (only then can it install its own
+ * updates). `codesign -dv` prints the signing authority; an ad hoc build has none.
+ */
+function hasDeveloperIdSignature(): Promise<boolean> {
+  const bundle = path.resolve(process.execPath, "..", "..", "..");
+  return new Promise((resolve) => {
+    execFile("/usr/bin/codesign", ["-dv", "--verbose=2", bundle], (error, stdout, stderr) => {
+      resolve(!error && /Authority=Developer ID Application:/.test(`${stdout}${stderr}`));
+    });
+  });
+}
+
 export function initUpdater(onState: (state: UpdateState) => void): void {
   notify = onState;
   if (!app.isPackaged) return;
+  if (process.platform === "darwin") {
+    // Until the signature is known, updates go through the browser (the safe way).
+    setState({ manual: true });
+    void hasDeveloperIdSignature().then((signed) => {
+      log.info(signed ? "[updater] signed with a Developer ID: updates install in the app" : "[updater] not signed with a Developer ID: updates download in the browser");
+      setState({ manual: !signed });
+    });
+  }
   // Loaded only in the installed app: development never touches the update machinery.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { autoUpdater } = require("electron-updater") as typeof import("electron-updater");

@@ -23,6 +23,7 @@ import { AttachButton, AttachmentChips, COMPOSER_SURFACE, QuoteFold, SaveStatus 
 import { RecipientField, invalidAddresses } from "./RecipientField";
 import { replyFields } from "./replyDefaults";
 import { fieldsFromDraft, hasContent, useDraftEditor, type DraftFields } from "./useDraftEditor";
+import { isModKey, shortcutLabel } from "~/lib/keys";
 
 type ReplyMode = Exclude<DraftMode, "new">;
 
@@ -159,7 +160,7 @@ function ReplyComposer({
       ref={surfaceRef}
       className={cn(COMPOSER_SURFACE, "mt-1")}
       onKeyDown={(event) => {
-        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        if (event.key === "Enter" && isModKey(event)) {
           event.preventDefault();
           void send();
         } else if (event.key === "Escape") {
@@ -241,7 +242,7 @@ function ReplyComposer({
             className="rounded-full ps-3 pe-2.5 before:rounded-full"
             disabled={editor.sending || editor.uploading.length > 0}
             onClick={() => void send()}
-            title="Send (Ctrl+Enter)"
+            title={`Send (${shortcutLabel("Ctrl+Enter")})`}
           >
             {editor.sending ? <Spinner size="sm" /> : null}
             Send

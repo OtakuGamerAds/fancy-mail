@@ -2,6 +2,8 @@
 //
 //   icon.png         512×512, the app icon: a blue envelope on a black rounded square
 //   icon.ico         16…256 px, for the .exe, the installer and the taskbar
+//   icon.icns        16…1024 px, for the Mac app: the same square on Apple's icon grid (it
+//                    fills 824 of 1024 px, centered, like every Mac app icon)
 //   icon-256.png     the window and notification icon (embedded into main.cjs)
 //   tray-<n>.png     16, 20, 24, 32, 40, 48 px: the envelope alone, for the notification area
 //                    at 100 %…300 % display scaling (embedded into main.cjs)
@@ -80,10 +82,17 @@ function envelope(x, y, e) {
 
 const SS = 4;
 
-/** The app icon: black rounded square, hairline edge, blue envelope. */
-function drawApp(size) {
+/** Apple's icon grid: the rounded square is 824 px of a 1024 px canvas, centered. */
+const MAC_ICON_SCALE = 824 / 1024;
+
+/**
+ * The app icon: black rounded square, hairline edge, blue envelope. `scale` is how much of the
+ * canvas the square fills (1 on Windows; less on a Mac, which leaves a margin around icons).
+ */
+function drawApp(size, scale = 1) {
   const rgba = Buffer.alloc(size * size * 4);
-  const u = 32 / size; // units per pixel
+  const u = 32 / size / scale; // units per pixel
+  const offset = 16 - 16 / scale; // the square stays centered
   const env = { cx: 16, cy: 16.4, hw: 9.6, hh: 6.9, r: 2.3, line: 0.8 };
   for (let py = 0; py < size; py++) {
     for (let px = 0; px < size; px++) {
@@ -92,8 +101,8 @@ function drawApp(size) {
       let envCover = 0;
       for (let sy = 0; sy < SS; sy++) {
         for (let sx = 0; sx < SS; sx++) {
-          const x = (px + (sx + 0.5) / SS) * u;
-          const y = (py + (sy + 0.5) / SS) * u;
+          const x = (px + (sx + 0.5) / SS) * u + offset;
+          const y = (py + (sy + 0.5) / SS) * u + offset;
           const d = roundedRect(x, y, 16, 16, 16, 16, 7);
           if (d <= 0) {
             bgCover++;
@@ -105,10 +114,10 @@ function drawApp(size) {
         }
       }
       const n = SS * SS;
-      const t = py / (size - 1);
-      let color = mix(BG_TOP, BG_BOTTOM, t);
+      const t = Math.min(1, Math.max(0, (py * u + offset) / 32));
+      let color = mix(BG_TOP, BG_BOTTOM, scale === 1 ? py / (size - 1) : t);
       color = mix(color, [255, 255, 255], (edgeCover / n) * 0.09);
-      const blue = mix(BLUE_TOP, BLUE_BOTTOM, Math.min(1, Math.max(0, (py * u - 9.5) / 14)));
+      const blue = mix(BLUE_TOP, BLUE_BOTTOM, Math.min(1, Math.max(0, (py * u + offset - 9.5) / 14)));
       const envT = bgCover ? envCover / bgCover : 0;
       color = mix(color, blue, envT);
       const i = (py * size + px) * 4;
@@ -233,6 +242,38 @@ function ico(images) {
   return Buffer.concat([dir, ...blobs]);
 }
 
+/**
+ * PNGs → .icns (what a Mac app bundle uses). Each entry is an OSType and a PNG; every macOS
+ * since 10.7 reads PNG entries.
+ */
+function icns(entries) {
+  const blobs = entries.map(([type, data]) => {
+    const head = Buffer.alloc(8);
+    head.write(type, 0, "ascii");
+    head.writeUInt32BE(data.length + 8, 4);
+    return Buffer.concat([head, data]);
+  });
+  const body = Buffer.concat(blobs);
+  const head = Buffer.alloc(8);
+  head.write("icns", 0, "ascii");
+  head.writeUInt32BE(body.length + 8, 4);
+  return Buffer.concat([head, body]);
+}
+
+/** The .icns sizes: OSType → pixels (the @2x ones are the next size up). */
+const ICNS_TYPES = [
+  ["icp4", 16],
+  ["icp5", 32],
+  ["ic11", 32],
+  ["ic12", 64],
+  ["ic07", 128],
+  ["ic13", 256],
+  ["ic08", 256],
+  ["ic14", 512],
+  ["ic09", 512],
+  ["ic10", 1024],
+];
+
 // ── Output ──────────────────────────────────────────────────────────────────────────────────
 
 fs.mkdirSync(OUT, { recursive: true });
@@ -245,3 +286,5 @@ write("icon.png", png(drawApp(512), 512));
 write("icon-256.png", png(drawApp(256), 256));
 write("icon.ico", ico([16, 20, 24, 32, 40, 48, 64, 256].map((size) => ({ size, rgba: drawApp(size) }))));
 for (const size of [16, 20, 24, 32, 40, 48]) write(`tray-${size}.png`, png(drawTray(size), size));
+const macPngs = new Map([16, 32, 64, 128, 256, 512, 1024].map((size) => [size, png(drawApp(size, MAC_ICON_SCALE), size)]));
+write("icon.icns", icns(ICNS_TYPES.map(([type, size]) => [type, macPngs.get(size)])));

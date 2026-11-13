@@ -1,8 +1,10 @@
 // Small helpers shared by the dev, snapshot and dist scripts: running child processes with
 // prefixed output, checking and waiting for ports, and stopping only what we started.
 import { spawn, spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 
@@ -211,6 +213,39 @@ export function waitForReadyLine(child, ms) {
       reject(new Error(`the server exited (code ${code}) before it was ready`));
     });
   });
+}
+
+/**
+ * Starts a bundled server (server.mjs) the way the installed app does — `executable` (Electron,
+ * or the packaged app's own binary) run as Node, the vault key on stdin — on a temp data folder.
+ * Resolves with its ready line once it is up and has stopped again when its stdin closed;
+ * rejects with the reason (its last stderr lines are printed).
+ */
+export async function smokeServer({ executable, entry, args = [] }) {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "fancy-mail-smoke-"));
+  const child = spawn(executable, [entry, "--data-dir", dataDir, "--port", "47859", "--no-demo", "--vault-key-stdin", ...args], {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", FANCY_MAIL_VERSION: rootVersion() },
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  child.stdout.setEncoding("utf8");
+  let stderr = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk) => (stderr += chunk));
+  child.stdin.write(`${JSON.stringify({ vaultKey: crypto.randomBytes(32).toString("base64") })}\n`);
+  try {
+    const ready = await waitForReadyLine(child, 60_000);
+    child.stdin.end();
+    if (!(await waitForExit(child, 5000))) throw new Error("it didn't stop when its stdin closed");
+    return ready;
+  } catch (error) {
+    console.error(stderr.split(/\r?\n/).slice(-20).join("\n"));
+    throw error;
+  } finally {
+    killTree(child);
+    await waitForExit(child, 2000);
+    fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5 });
+  }
 }
 
 export function readJson(file) {

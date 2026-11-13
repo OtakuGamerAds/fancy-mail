@@ -1,6 +1,6 @@
 /**
  * Where things are. Production keeps everything in Electron's userData folder
- * (%APPDATA%/Fancy Mail); development keeps it in the repo's .dev-data folder, and the two are
+ * (%APPDATA%/Fancy Mail on Windows, ~/Library/Application Support/Fancy Mail on macOS); development keeps it in the repo's .dev-data folder, and the two are
  * never mixed up: a dev run refuses to start on the installed app's folder.
  */
 import { app } from "electron";

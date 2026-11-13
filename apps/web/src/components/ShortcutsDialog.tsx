@@ -1,5 +1,6 @@
 import { Dialog, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Kbd } from "~/components/ui/kbd";
+import { shortcutKeys } from "~/lib/keys";
 import { SHORTCUTS, type Shortcut } from "~/hooks/useKeyboard";
 import { useUi } from "~/state/ui";
 
@@ -35,7 +36,7 @@ function ShortcutGroup({ group }: { group: Shortcut["group"] }) {
           <li key={s.label} className="flex h-7 items-center justify-between gap-4 text-sm">
             <span className="text-foreground/90">{s.label}</span>
             <span className="flex shrink-0 items-center gap-1">
-              {s.keys.map((k, i) => (
+              {shortcutKeys(s.keys).map((k, i) => (
                 <span key={k} className="flex items-center gap-1">
                   {i > 0 && s.keys[0] === "G" ? <span className="text-muted-foreground text-xs">then</span> : null}
                   <Kbd>{k}</Kbd>

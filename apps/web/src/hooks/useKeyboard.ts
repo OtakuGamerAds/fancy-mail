@@ -14,6 +14,7 @@ import { indexOfThread, listNav } from "~/state/listNav";
 import { openConversation } from "~/state/openConversation";
 import { navigate, navigateBackTo } from "~/state/router";
 import { useUi } from "~/state/ui";
+import { isModKey } from "~/lib/keys";
 
 export interface Shortcut {
   keys: string[];
@@ -87,7 +88,7 @@ export function useKeyboard() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing) return;
       const ui = useUi.getState();
-      const ctrl = event.ctrlKey || event.metaKey;
+      const ctrl = isModKey(event);
       const key = event.key;
 
       // These work everywhere, even while typing.

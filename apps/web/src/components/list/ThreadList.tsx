@@ -77,6 +77,7 @@ import { currentRoute, navigateBackTo, viewKey, type ViewRef } from "~/state/rou
 import { useUi, type InboxTabId, type ListFilter } from "~/state/ui";
 import { goScope } from "~/state/scope";
 import { describeView, FILTER_QUERY, inboxTabQuery, inScope, listQuery, searchWidens, splitsSettled } from "~/state/view";
+import { isModKey } from "~/lib/keys";
 
 const FILTERS: { id: ListFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -323,7 +324,7 @@ export function ThreadList({ view, rightmost }: { view: ViewRef; rightmost: bool
 
   const onRowClick = useCallback(
     (event: ReactMouseEvent, thread: ThreadSummary) => {
-      if (event.shiftKey || event.ctrlKey || event.metaKey) {
+      if (event.shiftKey || isModKey(event)) {
         toggleCheck(event, thread);
         return;
       }

@@ -103,6 +103,21 @@ const NO_MOTION = "*, *::before, *::after { animation-duration: 0s !important; a
 /** One step, run in the page (plain script text: the bundle's helpers don't exist there). */
 const STEP_SCRIPT = `(async (step) => {
   const find = (selector) => document.querySelector(selector);
+  if (step.startsWith("key:")) {
+    // key:mod+b — "mod" is Command on a Mac and Ctrl elsewhere, as the app reads it.
+    const parts = step.slice(4).split("+");
+    const key = parts.pop();
+    const mods = new Set(parts.map((p) => p.toLowerCase()));
+    const mac = /mac/i.test(navigator.platform);
+    const target = document.activeElement || document.body;
+    target.dispatchEvent(new KeyboardEvent("keydown", {
+      key, bubbles: true, cancelable: true,
+      ctrlKey: mods.has("ctrl") || (mods.has("mod") && !mac),
+      metaKey: mods.has("meta") || (mods.has("mod") && mac),
+      shiftKey: mods.has("shift"), altKey: mods.has("alt"),
+    }));
+    return true;
+  }
   if (step.startsWith("text:")) {
     const words = step.slice(5).trim().toLowerCase();
     const candidates = Array.from(document.querySelectorAll("[role=menuitem], button, a, [role=option]"));

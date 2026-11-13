@@ -4,12 +4,12 @@
  */
 import { toggleScopeItem, VIEW_KINDS, type ScopeItem, type ViewKind, type ViewScope } from "@fancy-mail/contracts";
 
-import { isMacPlatform } from "~/lib/utils";
+import { IS_MAC, isModKey } from "~/lib/keys";
 import { navigate, type ViewRef } from "./router";
 import { useUi } from "./ui";
 
 /** "Ctrl+click", or "Cmd+click" on a Mac. */
-export const MULTI_CLICK = isMacPlatform(typeof navigator === "undefined" ? "" : navigator.platform) ? "Cmd+click" : "Ctrl+click";
+export const MULTI_CLICK = IS_MAC ? "⌘-click" : "Ctrl+click";
 
 /** Where the mail views look (the last mail page's scope, kept while in Settings). */
 export function useScope(): ViewScope {
@@ -39,7 +39,7 @@ export function goScope(scope: ViewScope) {
 /** A click looks at just this group or account; Ctrl+click (Cmd on a Mac) adds or removes it. */
 export function pickScope(item: ScopeItem, event: { ctrlKey: boolean; metaKey: boolean }) {
   const alone: ViewScope = item.type === "group" ? { type: "group", groupId: item.id } : { type: "account", accountId: item.id };
-  goScope(event.ctrlKey || event.metaKey ? toggleScopeItem(currentScope(), item) : alone);
+  goScope(isModKey(event) ? toggleScopeItem(currentScope(), item) : alone);
 }
 
 /** Adds the item to where the views look, or takes it out. */

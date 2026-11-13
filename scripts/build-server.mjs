@@ -7,13 +7,10 @@
 //   node scripts/build-server.mjs           build
 //   node scripts/build-server.mjs --smoke   build, then start the bundle on a temp folder,
 //                                           wait for its ready line and stop it again
-import { spawn } from "node:child_process";
-import crypto from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
-import { ROOT, electronPath, fail, killTree, requireFrom, rootVersion, waitForExit, waitForReadyLine } from "./lib.mjs";
+import { ROOT, electronPath, fail, requireFrom, smokeServer } from "./lib.mjs";
 
 const ENTRY = path.join(ROOT, "apps", "server", "src", "bin.ts");
 const OUT_DIR = path.join(ROOT, "apps", "desktop", "dist", "server");
@@ -72,33 +69,10 @@ if (fs.existsSync(assets)) {
 }
 
 if (process.argv.includes("--smoke")) {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "fancy-mail-bundle-smoke-"));
-  const child = spawn(electronPath(), [OUT, "--data-dir", dataDir, "--port", "47859", "--no-demo", "--vault-key-stdin"], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", FANCY_MAIL_VERSION: rootVersion() },
-    stdio: ["pipe", "pipe", "pipe"],
-    windowsHide: true,
-  });
-  child.stdout.setEncoding("utf8");
-  let stderr = "";
-  child.stderr.setEncoding("utf8");
-  child.stderr.on("data", (chunk) => (stderr += chunk));
-  child.stdin.write(`${JSON.stringify({ vaultKey: crypto.randomBytes(32).toString("base64") })}\n`);
   try {
-    const ready = await waitForReadyLine(child, 60_000);
-    console.log(`[server] the bundle starts: ready on ${ready.url}`);
+    const ready = await smokeServer({ executable: electronPath(), entry: OUT });
+    console.log(`[server] the bundle starts: ready on ${ready.url}, and stops when its stdin closes`);
   } catch (error) {
-    console.error(stderr.split(/\r?\n/).slice(-20).join("\n"));
-    killTree(child);
-    fs.rmSync(dataDir, { recursive: true, force: true });
     fail(`The bundled server didn't start: ${error.message}`);
   }
-  child.stdin.end();
-  if (!(await waitForExit(child, 5000))) {
-    console.error("[server] the bundle didn't stop when its stdin closed; ending it");
-    killTree(child);
-    await waitForExit(child, 2000);
-  } else {
-    console.log("[server] the bundle stops when its stdin closes");
-  }
-  fs.rmSync(dataDir, { recursive: true, force: true });
 }

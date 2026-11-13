@@ -103,10 +103,22 @@ computer only (they are not uploaded to the server's Drafts folder).
 
 ## Install
 
-Download `Fancy-Mail-Setup-<version>.exe` from
-[Releases](https://github.com/OtakuGamerAds/fancy-mail/releases/latest) (Windows; not signed,
-so SmartScreen asks once: More info › Run anyway). New versions show up on the update button
-in the sidebar; one click downloads and restarts into them. Your mail and accounts stay.
+From [Releases](https://github.com/OtakuGamerAds/fancy-mail/releases/latest):
+
+- **Windows:** `Fancy-Mail-Setup-<version>.exe`. It is not signed, so SmartScreen asks once:
+  More info › Run anyway. New versions show up on the update button in the sidebar; one click
+  downloads and restarts into them.
+- **macOS** (12 or newer): `Fancy-Mail-<version>-arm64.dmg` for Apple silicon (M1 and later),
+  `-x64.dmg` for an Intel Mac. Open it and drag Fancy Mail to Applications. It is not signed by
+  an Apple developer account, so macOS stops the first start: open System Settings › Privacy &
+  Security and click **Open Anyway** next to Fancy Mail (once). If macOS says the app "is
+  damaged", run `xattr -dr com.apple.quarantine "/Applications/Fancy Mail.app"` in Terminal and
+  open it again. New versions show up on the update button too; on a Mac it downloads the new
+  `.dmg` in your browser (drag it to Applications again). Closing the window keeps Fancy Mail
+  running in the Dock, so new mail still arrives; Quit (⌘Q) stops it.
+
+Your mail and accounts stay through every update. They live in `%APPDATA%\Fancy Mail` on
+Windows and `~/Library/Application Support/Fancy Mail` on a Mac.
 
 ## Demo mail
 
@@ -122,7 +134,7 @@ pnpm install
 pnpm dev            # the desktop app, with demo data in .dev-data/
 pnpm dev:browser    # server + UI only; open the printed URL
 pnpm test
-pnpm dist           # Windows installer in release/
+pnpm dist           # the installer for this computer (Windows, or macOS on a Mac) in release/
 ```
 
 The server runs on Electron's Node (it needs `node:sqlite` with full-text search). How the

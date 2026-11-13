@@ -45,6 +45,7 @@ import { useBootstrap, useDirectory, useQuickSearch } from "~/state/queries";
 import { navigate, type Route } from "~/state/router";
 import { useUi } from "~/state/ui";
 import { participantsText } from "~/components/list/ThreadRow";
+import { shortcutLabel } from "~/lib/keys";
 
 interface PaletteItem {
   id: string;
@@ -187,7 +188,7 @@ function PaletteBody({ onClose }: { onClose(): void }) {
     const actions: PaletteItem[] = [
       { id: "a:compose", group: "Actions", title: "New message", text: "new message compose write", icon: <SquarePenIcon />, shortcut: "C", run: () => useUi.getState().openCompose() },
       { id: "a:add", group: "Actions", title: "Add account", text: "add account", icon: <PlusIcon />, run: () => useUi.getState().openDialog({ type: "add-account" }) },
-      { id: "a:settings", group: "Actions", title: "Settings", text: "settings preferences", icon: <SettingsIcon />, shortcut: "Ctrl ,", run: () => go({ page: "settings", section: "accounts" }) },
+      { id: "a:settings", group: "Actions", title: "Settings", text: "settings preferences", icon: <SettingsIcon />, shortcut: shortcutLabel("Ctrl+,"), run: () => go({ page: "settings", section: "accounts" }) },
       { id: "a:agents", group: "Actions", title: "Agents and MCP", text: "agents mcp claude settings", icon: <SettingsIcon />, run: () => go({ page: "settings", section: "agents" }) },
       { id: "a:activity", group: "Actions", title: "Activity", text: "activity history undo", icon: <ActivityIcon />, run: () => go({ page: "activity" }) },
       {

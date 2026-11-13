@@ -25,6 +25,8 @@ export interface UpdateState {
   percent?: number | null;
   downloadPercent?: number | null;
   message?: string | null;
+  /** macOS without a Developer ID signature: "download" opens the new version in the browser. */
+  manual?: boolean;
 }
 
 export interface FancyMailBridge {
@@ -37,6 +39,8 @@ export interface FancyMailBridge {
   setCloseToTray(on: boolean): void;
   notify(n: { title: string; body: string; threadId?: string }): void;
   onOpenThread(cb: (threadId: string) => void): (() => void) | void;
+  /** A menu item for the page to carry out (macOS's app menu). */
+  onMenuAction?(cb: (action: string) => void): (() => void) | void;
   update?: {
     state(): Promise<UpdateState>;
     check(): Promise<unknown> | void;

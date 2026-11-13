@@ -2,11 +2,12 @@
  * The main window: its size and place (remembered in <dataDir>/window.json), what it may
  * navigate to, and the small native context menu for text.
  */
-import { BrowserWindow, Menu, clipboard, nativeImage, screen, shell, type Rectangle } from "electron";
+import { BrowserWindow, Menu, app, clipboard, nativeImage, screen, shell, type Rectangle } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 
 import appIcon from "../build/icon-256.png";
+import { CHANNELS } from "./channels.ts";
 import { log } from "./log.ts";
 
 const DEFAULT_WIDTH = 1320;
@@ -21,6 +22,37 @@ interface SavedBounds {
 }
 
 export const windowIcon = () => nativeImage.createFromBuffer(Buffer.from(appIcon));
+
+// ── Title bar ───────────────────────────────────────────────────────────────────────────────
+//
+// After T3 Code's apps/desktop/src/window/DesktopWindow.ts (MIT License — see
+// THIRD_PARTY_LICENSE_T3CODE.txt). The page draws its own title bar in every case:
+// - Windows: the native buttons are drawn over the top right (titleBarOverlay); the page keeps
+//   clear of them with --wco-inset (apps/web/src/lib/windowControls.ts).
+// - macOS: the traffic lights sit in the top left, centered on the page's 52 px header; the
+//   page keeps clear of them with --desktop-window-controls-inset (set by the preload).
+
+/** The page's header strip (apps/web --header-height). */
+const HEADER_HEIGHT = 52;
+const MAC_WINDOW_BUTTON_RADIUS = 7;
+
+type TitleBarOptions = Pick<Electron.BrowserWindowConstructorOptions, "titleBarStyle" | "titleBarOverlay" | "trafficLightPosition">;
+
+export function titleBarOptions(platform: NodeJS.Platform): TitleBarOptions {
+  if (platform === "darwin") {
+    return { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 16, y: HEADER_HEIGHT / 2 - MAC_WINDOW_BUTTON_RADIUS } };
+  }
+  return { titleBarStyle: "hidden", titleBarOverlay: { color: "#00000000", symbolColor: "#d4d4d4", height: 40 } };
+}
+
+/** macOS: the native buttons ignore the page's zoom, so they move with it to stay centered on the header. */
+export function syncMacWindowButtons(win: BrowserWindow): void {
+  if (process.platform !== "darwin" || win.isDestroyed() || win.isFullScreen()) return;
+  win.setWindowButtonPosition({
+    x: 16,
+    y: Math.round((HEADER_HEIGHT * win.webContents.getZoomFactor()) / 2 - MAC_WINDOW_BUTTON_RADIUS),
+  });
+}
 
 // ── Bounds ──────────────────────────────────────────────────────────────────────────────────
 
@@ -221,9 +253,9 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
     show: false,
     title: "Fancy Mail",
     backgroundColor: "#000000",
-    titleBarStyle: "hidden",
-    titleBarOverlay: { color: "#00000000", symbolColor: "#d4d4d4", height: 40 },
-    icon: windowIcon(),
+    ...titleBarOptions(process.platform),
+    // macOS takes the icon from the app bundle (and the Dock); a window icon is for Windows and Linux.
+    ...(process.platform === "darwin" ? {} : { icon: windowIcon() }),
     webPreferences: {
       preload: options.preload,
       contextIsolation: true,
@@ -238,13 +270,31 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
   if (options.boundsFile && !options.snapshotSize) rememberBounds(win, options.boundsFile);
   guardNavigation(win, options.appOrigins);
   textContextMenu(win);
+  if (process.platform === "darwin") {
+    win.webContents.on("did-finish-load", () => syncMacWindowButtons(win));
+    win.on("enter-full-screen", () => win.webContents.send(CHANNELS.fullscreenChanged, true));
+    win.on("leave-full-screen", () => {
+      syncMacWindowButtons(win);
+      win.webContents.send(CHANNELS.fullscreenChanged, false);
+    });
+  }
   return win;
+}
+
+/** Zoom in, out or back to 100 % (the View menu), keeping macOS's window buttons in place. */
+export function zoomWindow(win: BrowserWindow | null, direction: "in" | "out" | "reset"): void {
+  if (!win || win.isDestroyed()) return;
+  const contents = win.webContents;
+  contents.setZoomLevel(direction === "reset" ? 0 : contents.getZoomLevel() + (direction === "in" ? 0.5 : -0.5));
+  syncMacWindowButtons(win);
 }
 
 export function showWindow(win: BrowserWindow | null): void {
   if (!win || win.isDestroyed()) return;
   if (win.isMinimized()) win.restore();
   if (!win.isVisible()) win.show();
+  // macOS brings the window forward only when the app itself is active (a notification click, a second launch).
+  if (process.platform === "darwin") app.focus({ steal: true });
   win.focus();
 }
 
@@ -257,12 +307,12 @@ const escapeHtml = (text: string) =>
 export function statusPageUrl(title: string, lines: string[]): string {
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Fancy Mail</title>
 <style>
-  html,body{margin:0;height:100%;background:#000;color:#d4d4d4;font:14px/1.5 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
+  html,body{margin:0;height:100%;background:#000;color:#d4d4d4;font:14px/1.5 -apple-system,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
   .drag{position:fixed;inset:0 0 auto 0;height:40px;-webkit-app-region:drag}
   main{height:100%;display:grid;place-content:center;padding:0 32px;max-width:560px;margin:0 auto}
   h1{font-size:15px;font-weight:600;color:#fafafa;margin:0 0 6px}
   p{margin:0 0 4px;color:#a1a1aa;overflow-wrap:anywhere}
-  code{font:12px ui-monospace,"Cascadia Code",Consolas,monospace;color:#a1a1aa}
+  code{font:12px ui-monospace,"SF Mono","Cascadia Code",Consolas,monospace;color:#a1a1aa}
 </style></head><body><div class="drag"></div><main>
 <h1>${escapeHtml(title)}</h1>
 ${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("\n")}

@@ -37,6 +37,7 @@ import { cn } from "~/lib/utils";
 import { useSwipeAction } from "~/hooks/useSwipeAction";
 import { runThreadCommand, runTimedCommand, toggleStar, type ThreadState } from "~/state/commands";
 import type { Directory } from "~/state/queries";
+import { shortcutLabel } from "~/lib/keys";
 
 export const ROW_HEIGHT = { comfortable: 68, compact: 40 } as const;
 
@@ -87,7 +88,7 @@ function SettleAction({ settled, onClick }: { settled: boolean; onClick(): void 
     <button
       type="button"
       aria-label={`${label} conversation`}
-      title={`${label} conversation (Ctrl+Shift+S)`}
+      title={`${label} conversation (${shortcutLabel("Ctrl+Shift+S")})`}
       className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-muted-foreground text-xs outline-none hover:bg-white/8 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
       onClick={(event) => {
         event.stopPropagation();

@@ -1,5 +1,5 @@
 /**
- * The notification-area icon (Windows): click opens the window, the menu has Open and Quit.
+ * The notification-area icon (Windows; a Mac has the Dock instead): click opens the window, the menu has Open and Quit.
  * Closing the window keeps Fancy Mail running here, so new mail still arrives.
  */
 import { Menu, Tray, nativeImage } from "electron";
