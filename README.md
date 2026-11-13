@@ -109,13 +109,15 @@ From [Releases](https://github.com/OtakuGamerAds/fancy-mail/releases/latest):
   More info › Run anyway. New versions show up on the update button in the sidebar; one click
   downloads and restarts into them.
 - **macOS** (12 or newer): `Fancy-Mail-<version>-arm64.dmg` for Apple silicon (M1 and later),
-  `-x64.dmg` for an Intel Mac. Open it and drag Fancy Mail to Applications. It is not signed by
-  an Apple developer account, so macOS stops the first start: open System Settings › Privacy &
-  Security and click **Open Anyway** next to Fancy Mail (once). If macOS says the app "is
-  damaged", run `xattr -dr com.apple.quarantine "/Applications/Fancy Mail.app"` in Terminal and
-  open it again. New versions show up on the update button too; on a Mac it downloads the new
-  `.dmg` in your browser (drag it to Applications again). Closing the window keeps Fancy Mail
-  running in the Dock, so new mail still arrives; Quit (⌘Q) stops it.
+  `-x64.dmg` for an Intel Mac. Open it and drag Fancy Mail to Applications. It is signed with
+  Fancy Mail's own certificate, not an Apple developer account, so macOS stops the very first
+  start: open System Settings › Privacy & Security and click **Open Anyway** next to Fancy Mail
+  (once). If macOS says the app "is damaged", run
+  `xattr -dr com.apple.quarantine "/Applications/Fancy Mail.app"` in Terminal and open it again.
+  After that, updates work as on Windows: one click on the update button, no password. (From
+  0.1.22 or older, install 0.1.23 from its `.dmg` once; macOS may ask for the Mac's password one
+  last time.) Closing the window keeps Fancy Mail running in the Dock, so new mail still
+  arrives; Quit (⌘Q) stops it.
 
 Your mail and accounts stay through every update. They live in `%APPDATA%\Fancy Mail` on
 Windows and `~/Library/Application Support/Fancy Mail` on a Mac.

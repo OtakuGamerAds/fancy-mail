@@ -721,7 +721,7 @@ function Shelf({
     if (!reveal.current || !open || threads.length === 0 || !scroller || !list) return;
     reveal.current = false;
     const offset = list.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-    scroller.scrollTo({ top: Math.max(0, scroller.scrollTop + offset - SHELF_HEADER_HEIGHT), behavior: "smooth" });
+    scroller.scrollTo({ top: Math.max(0, scroller.scrollTop + offset - SHELF_HEADER_HEIGHT) });
   }, [open, threads.length, scrollRef]);
   return (
     <>
