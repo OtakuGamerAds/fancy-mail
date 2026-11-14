@@ -22,7 +22,7 @@ export function agentAccessAllows(level: AgentAccess, needed: AgentAccess): bool
 export const AGENT_ACCESS_INFO: Record<AgentAccess, { label: string; description: string }> = {
   none: { label: "Hidden", description: "Agents can't see this account at all." },
   read: { label: "Read", description: "Search and read mail and attachments." },
-  organize: { label: "Organize", description: "Read, plus labels, archive, read state, stars and trash." },
+  organize: { label: "Organize", description: "Read, plus labels, archive, read state, stars, trash and summaries." },
   draft: { label: "Draft", description: "Organize, plus write drafts for you to review and send." },
   send: { label: "Send", description: "Draft, plus send mail on your behalf." },
 };
@@ -300,6 +300,20 @@ export const Actor = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("sync") }),
 ]);
 export type Actor = z.infer<typeof Actor>;
+
+/**
+ * What an agent wrote about a conversation (shown above its messages). Fancy Mail has no AI of
+ * its own: the user's agent fills it in, in whatever form the user asked it for.
+ */
+export const AiSummary = z.object({
+  text: z.string(),
+  by: Actor,
+  at: z.number(),
+});
+export type AiSummary = z.infer<typeof AiSummary>;
+
+/** The longest summary kept; it is meant to be read at a glance. */
+export const AI_SUMMARY_MAX_CHARS = 4000;
 
 // ── Drafts ──────────────────────────────────────────────────────────────────────────────────
 

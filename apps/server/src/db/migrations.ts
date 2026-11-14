@@ -7,7 +7,7 @@
  *             ├─ messages ──┬────────────────────┘ (a message can sit in several mailboxes)
  *             │             ├─ message_labels ── labels (global, mirrored to every server)
  *             │             ├─ message_bodies, attachments, message_fts (FTS5, rowid = seq)
- *             ├─ threads (denormalized cache) ── thread_labels
+ *             ├─ threads (denormalized cache) ── thread_labels, thread_summaries
  *             ├─ drafts, outbox
  *   groups, settings, kv, secrets (AES-GCM), uploads, activity (with its inverse for Undo)
  */
@@ -333,6 +333,21 @@ export const MIGRATIONS: Migration[] = [
           at INTEGER NOT NULL
         );
         ALTER TABLE drafts ADD COLUMN wait_until INTEGER;
+      `);
+    },
+  },
+  {
+    version: 6,
+    name: "summaries agents write on conversations",
+    up: (db) => {
+      // One per conversation, shown above its messages. by_json: who wrote it (an Actor).
+      db.exec(`
+        CREATE TABLE thread_summaries (
+          thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE,
+          text TEXT NOT NULL,
+          by_json TEXT NOT NULL,
+          at INTEGER NOT NULL
+        );
       `);
     },
   },

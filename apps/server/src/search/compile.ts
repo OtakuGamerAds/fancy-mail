@@ -141,7 +141,10 @@ export function compileQuery(parsed: ParsedQuery, lookups: CompileLookups, optio
         break;
       }
       case "has":
-        addTerm(term.negated, "t.has_attachments = 1");
+        addTerm(
+          term.negated,
+          term.value === "summary" ? "EXISTS (SELECT 1 FROM thread_summaries s WHERE s.thread_id = t.id)" : "t.has_attachments = 1",
+        );
         break;
       case "in": {
         if (!term.negated) hasLocation = true;

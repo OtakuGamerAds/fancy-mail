@@ -32,7 +32,7 @@ export type QueryTerm =
   | { kind: "text"; value: string; negated: boolean }
   | { kind: "field"; field: FieldKey; value: string; negated: boolean }
   | { kind: "is"; value: IsValue; negated: boolean }
-  | { kind: "has"; value: "attachment"; negated: boolean }
+  | { kind: "has"; value: "attachment" | "summary"; negated: boolean }
   | { kind: "in"; value: InValue; negated: boolean }
   /** Gmail's inbox category of the conversation. */
   | { kind: "category"; value: CategoryValue; negated: boolean }
@@ -172,8 +172,10 @@ export function parseQuery(input: string, now: number = Date.now()): ParsedQuery
       case "has":
         if (lower === "attachment" || lower === "attachments") {
           terms.push({ kind: "has", value: "attachment", negated });
+        } else if (lower === "summary") {
+          terms.push({ kind: "has", value: "summary", negated });
         } else {
-          errors.push(`Unknown has:${value}. Use has:attachment.`);
+          errors.push(`Unknown has:${value}. Use has:attachment or has:summary.`);
         }
         break;
       case "in":
@@ -259,7 +261,7 @@ export function queryHasLocation(parsed: ParsedQuery): boolean {
 export const QUERY_SYNTAX_HELP = [
   "Words and \"quoted phrases\" match subject, people, body and attachment names.",
   "from: to: cc: subject: filename: — match one field (filename:pdf finds PDFs).",
-  "is:unread is:read is:starred is:unstarred is:draft · has:attachment",
+  "is:unread is:read is:starred is:unstarred is:draft · has:attachment · has:summary (an agent wrote one)",
   "is:settled is:waiting is:snoozed is:pinned is:unsettled — where a conversation stands (Fancy Mail's own labels):",
   "  settled: done with · waiting: waiting for an answer · snoozed: later · pinned: kept on top; new mail brings them back",
   "in:inbox in:sent in:drafts in:archive in:starred in:trash in:spam in:anywhere",

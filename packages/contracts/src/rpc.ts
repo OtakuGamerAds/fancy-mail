@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import {
   Account,
+  AiSummary,
   Address,
   Activity,
   AgentAccess,
@@ -105,6 +106,8 @@ export const ThreadDetail = z.object({
   messages: z.array(Message),
   /** Unsent drafts in this conversation (a reply an agent prepared shows here for review). */
   drafts: z.array(Draft),
+  /** What an agent wrote about the conversation; null when none has. */
+  summary: AiSummary.nullable(),
 });
 export type ThreadDetail = z.infer<typeof ThreadDetail>;
 
@@ -161,6 +164,11 @@ export const RPC_METHODS = {
       actions: z.array(ModifyAction).min(1),
     }),
     result: z.object({ activity: Activity.nullable() }),
+  },
+  /** Set or (text null) remove the summary shown above a conversation. */
+  "threads.setSummary": {
+    params: z.object({ threadId: z.string(), text: z.string().nullable() }),
+    result: z.object({ summary: AiSummary.nullable() }),
   },
   /** Download the bodies of a thread now (opening a thread does this by itself). */
   "threads.fetchBodies": {

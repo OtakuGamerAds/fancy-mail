@@ -7,6 +7,7 @@ import { createLabelsStore } from "./labels.ts";
 import { createMailboxesStore } from "./mailboxes.ts";
 import { createMessagesStore } from "./messages.ts";
 import { createKvStore, createSettingsStore } from "./settings.ts";
+import { createSummariesStore } from "./summaries.ts";
 import { createThreadStatesStore } from "./threadStates.ts";
 import { createThreadsStore, refreshThreads } from "./threads.ts";
 
@@ -21,6 +22,7 @@ export function createStore(db: Db) {
     messages: createMessagesStore(db),
     threads: createThreadsStore(db),
     threadStates: createThreadStatesStore(db),
+    summaries: createSummariesStore(db),
     drafts: createDraftsStore(db),
     uploads: createUploadsStore(db),
     activity: createActivityStore(db),

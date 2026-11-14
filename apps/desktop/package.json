@@ -1,7 +1,7 @@
 {
   "name": "@fancy-mail/desktop",
   "productName": "Fancy Mail",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "description": "A calm, fast email client for many accounts.",
   "author": "OtakuGamerAds",
   "license": "MIT",

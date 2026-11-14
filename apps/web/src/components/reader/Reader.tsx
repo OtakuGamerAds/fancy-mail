@@ -1,6 +1,7 @@
 /**
- * The open conversation: a header strip (subject, account, labels, toolbar), the messages as
- * a timeline of cards, drafts waiting for review, and the reply box.
+ * The open conversation: a header strip (subject, account, labels, toolbar), an agent's summary
+ * when there is one, the messages as a timeline of cards, drafts waiting for review, and the
+ * reply box.
  */
 import type { Message, ThreadDetail } from "@fancy-mail/contracts";
 import {
@@ -47,6 +48,7 @@ import { formatRoute, type Route } from "~/state/router";
 import { useUi } from "~/state/ui";
 import { DraftCard } from "./DraftCard";
 import { MessageCard } from "./MessageCard";
+import { SummaryCard } from "./SummaryCard";
 import { shortcutLabel } from "~/lib/keys";
 
 export function Reader({ threadId, onClose, fullWidth }: { threadId: string; onClose(): void; fullWidth: boolean }) {
@@ -212,6 +214,7 @@ function ReaderContent({ detail, onClose, fullWidth }: { detail: ThreadDetail; o
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto" data-reader-scroll>
         <div className="mx-auto flex w-full max-w-[52rem] flex-col gap-2 px-5 pt-4 pb-6">
+          {detail.summary ? <SummaryCard summary={detail.summary} threadId={thread.id} lastMessageAt={thread.lastMessageAt} /> : null}
           {messages.map((message, index) => {
             if (fold && index >= foldStart && index < foldEnd) {
               if (index !== foldStart) return null;

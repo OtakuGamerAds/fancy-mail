@@ -8,6 +8,7 @@ import type {
   Account,
   Activity,
   Actor,
+  AiSummary,
   AttachmentMeta,
   Draft,
   DraftInput,
@@ -30,6 +31,8 @@ export interface McpMailApi {
   /** Downloads missing bodies of the thread; resolves when they are in or after `timeoutMs`. */
   ensureBodies(threadId: string, actor: Actor, timeoutMs: number): Promise<void>;
   modify(threadIds: string[], actions: ModifyAction[], actor: Actor): { activity: Activity | null };
+  /** Sets (or, text null, removes) the summary shown above a conversation. */
+  setSummary(threadId: string, text: string | null, actor: Actor): { summary: AiSummary | null };
 
   createLabel(input: { name: string; color: string | null }, actor: Actor): Label;
   updateLabel(input: { labelId: string; name?: string; color?: string | null }, actor: Actor): Label;

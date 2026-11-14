@@ -35,6 +35,7 @@ export function rpcHandlers(services: Services): HandlerTable {
     "threads.states": (_p, ctx) => services.threads.states(ctx),
     "threads.clearMark": (p, ctx) => (services.threads.clearMark(p.threadId, ctx), EMPTY),
     "threads.fetchBodies": (p, ctx) => (services.threads.fetchBodies(p.threadId, ctx), EMPTY),
+    "threads.setSummary": (p, ctx) => services.threads.setSummary(p.threadId, p.text, ctx),
     "labels.create": (p, ctx) => services.labels.create(p, ctx),
     "labels.update": (p, ctx) => services.labels.update(p, ctx),
     "labels.delete": (p, ctx) => (services.labels.delete(p, ctx), EMPTY),

@@ -1,5 +1,5 @@
-import { parseQuery } from "@fancy-mail/contracts";
-import type { Activity, ModifyAction, SearchFacets, SearchResult, ThreadDetail, ThreadMark, ThreadTimer } from "@fancy-mail/contracts";
+import { AI_SUMMARY_MAX_CHARS, parseQuery } from "@fancy-mail/contracts";
+import type { Activity, AiSummary, ModifyAction, SearchFacets, SearchResult, ThreadDetail, ThreadMark, ThreadTimer } from "@fancy-mail/contracts";
 
 import type { SqlValue } from "../db/sqlite.ts";
 import { AppError } from "../errors.ts";
@@ -300,7 +300,34 @@ export function createThreadsService(env: ServiceEnv) {
           ),
         ),
         drafts: store.drafts.forThread(threadId).map(toContractDraft),
+        summary: store.summaries.get(threadId),
       };
+    },
+
+    /**
+     * The summary shown above a conversation: an agent writes it (organize access), anyone who
+     * may change the conversation removes it (text null or blank). Not an Activity entry: it
+     * changes no mail, and a morning of summaries would bury the real changes.
+     */
+    setSummary(threadId: string, text: string | null, ctx: CallContext): { summary: AiSummary | null } {
+      const { account } = visibleThread(threadId, ctx);
+      requireAccess(ctx, account, "organize", "writing a summary");
+      const clean = (text ?? "").replace(/\r\n?/g, "\n").trim();
+      if (clean.length > AI_SUMMARY_MAX_CHARS) {
+        throw new AppError(
+          "bad_request",
+          `The summary is ${clean.length.toLocaleString("en-US")} characters; the most is ${AI_SUMMARY_MAX_CHARS.toLocaleString("en-US")}. It is read at a glance above the conversation: keep it short.`,
+        );
+      }
+      let summary: AiSummary | null = null;
+      if (clean) {
+        summary = { text: clean, by: ctx.actor, at: env.now() };
+        store.summaries.set(threadId, summary);
+      } else if (!store.summaries.remove(threadId)) {
+        return { summary: null };
+      }
+      invalidate(env, ["threads"], [threadId]);
+      return { summary };
     },
 
     fetchBodies(threadId: string, ctx: CallContext): void {

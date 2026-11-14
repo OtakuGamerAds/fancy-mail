@@ -611,6 +611,13 @@ function seedDrafts(
       remoteMailboxId: null,
     });
     store.refreshThreads([tax.threadId]);
+    // The summary Claude Code wrote above the conversation (after its latest message).
+    store.summaries.set(tax.threadId, {
+      text:
+        "Weber & Partner need three receipts for the VAT return; the deadline is the **10th**.\n\n- Missing: **CloudKiln** (render cluster), **VoiceForge AI** (two invoices), the **PayFlow** payments to Pixelmarkt\n- A PayFlow PDF export is fine if the date and recipient show\n- A reply with the list is drafted below: attach the files and send it",
+      by: agent,
+      at: Math.max(input.now - 4 * HOUR, (store.threads.get(tax.threadId)?.last_message_at ?? 0) + 60_000),
+    });
     writeActivity(env, {
       actor: agent,
       summary: `Drafted a reply to “${last ? last.subject.replace(/^(AW|Re):\s*/i, "") : "USt-VA"}”`,

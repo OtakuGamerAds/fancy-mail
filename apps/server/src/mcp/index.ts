@@ -23,6 +23,7 @@ export function createMailApi(services: Services): McpMailApi {
     getThread: (threadId, actor) => services.threads.get(threadId, ctx(actor)),
     ensureBodies: (threadId, actor, timeoutMs) => services.threads.ensureBodies(threadId, ctx(actor), timeoutMs),
     modify: (threadIds, actions, actor) => services.threads.modify(threadIds, actions, ctx(actor)),
+    setSummary: (threadId, text, actor) => services.threads.setSummary(threadId, text, ctx(actor)),
 
     createLabel: (input, actor) => services.labels.create(input, ctx(actor)),
     updateLabel: (input, actor) => services.labels.update(input, ctx(actor)),

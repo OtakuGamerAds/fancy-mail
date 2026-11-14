@@ -7,6 +7,7 @@ import {
   type Activity,
   type Actor,
   type AgentAccess,
+  type AiSummary,
   type Draft,
   type Label,
   type ModifyAction,
@@ -68,6 +69,7 @@ function fakeApi(levels: { business: AgentAccess; bank: AgentAccess }) {
   const labels: Label[] = [];
   const activity: Activity[] = [];
   const drafts: Draft[] = [];
+  const summaries = new Map<string, AiSummary>();
   const access = (accountId: string) => accounts.find((a) => a.id === accountId)!.agentAccess;
   const need = (accountId: string, level: AgentAccess, actor: Actor) => {
     if (actor.kind === "agent" && !agentAccessAllows(access(accountId), level)) {
@@ -95,6 +97,7 @@ function fakeApi(levels: { business: AgentAccess; bank: AgentAccess }) {
       return {
         thread: t,
         drafts: drafts.filter((d) => d.threadId === threadId),
+        summary: summaries.get(threadId) ?? null,
         messages: [
           {
             id: "msg_1",
@@ -122,6 +125,16 @@ function fakeApi(levels: { business: AgentAccess; bank: AgentAccess }) {
       };
     },
     ensureBodies: async () => {},
+    setSummary: (threadId, text, actor) => {
+      need(threads.find((t) => t.id === threadId)!.accountId, "organize", actor);
+      if (!text.trim()) {
+        summaries.delete(threadId);
+        return { summary: null };
+      }
+      const summary = { text: text.trim(), by: actor, at: new Date(2026, 9, 4, 8, 0).getTime() };
+      summaries.set(threadId, summary);
+      return { summary };
+    },
     modify: (threadIds, actions, actor) => {
       for (const id of threadIds) need(threads.find((t) => t.id === id)!.accountId, "organize", actor);
       calls.modify.push({ threadIds, actions });
@@ -160,7 +173,7 @@ function fakeApi(levels: { business: AgentAccess; bank: AgentAccess }) {
       return entry;
     },
   };
-  return { api, calls, drafts };
+  return { api, calls, drafts, summaries };
 }
 
 async function connect(api: McpMailApi) {
@@ -188,6 +201,23 @@ describe("MCP tools", () => {
     const draftTools = (await draft.client.listTools()).tools.map((t) => t.name);
     expect(draftTools).toEqual(expect.arrayContaining(["mail_organize", "mail_draft"]));
     expect(draftTools).not.toContain("mail_send_draft");
+    expect(readTools).not.toContain("mail_summary");
+    expect(draftTools).toContain("mail_summary");
+  });
+
+  it("writes a summary the conversation then shows, and removes it", async () => {
+    const fake = fakeApi({ business: "organize", bank: "read" });
+    const { call } = await connect(fake.api);
+    const set = await call("mail_summary", { thread_id: "thr_1", summary: "AdPilot's October invoice.\n- Pay by Oct 17" });
+    expect(set.isError).toBe(false);
+    expect(fake.summaries.get("thr_1")).toMatchObject({ text: "AdPilot's October invoice.\n- Pay by Oct 17", by: { kind: "agent", name: "claude-code" } });
+    const read = await call("mail_read_thread", { thread_id: "thr_1" });
+    expect(read.text).toContain("Summary shown above it (by claude-code, 2026-10-04 08:00):\nAdPilot's October invoice.");
+    const cleared = await call("mail_summary", { thread_id: "thr_1", summary: "" });
+    expect(cleared.text).toBe("thr_1 has no summary now.");
+    expect(fake.summaries.has("thr_1")).toBe(false);
+    const readOnly = await call("mail_summary", { thread_id: "thr_3", summary: "Statement" });
+    expect(readOnly.isError).toBe(true);
   });
 
   it("hides accounts with no access from the overview and search", async () => {

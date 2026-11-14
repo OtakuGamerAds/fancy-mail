@@ -29,6 +29,10 @@ only do what you allowed per account.
   Waiting, Snoozed and Settled fold into sections at the foot of the list, one click away. They
   are labels (Waiting, Snoozed, Settled, Pinned), so Gmail shows them too; the mail stays where
   it is. Search with `is:waiting`, `is:snoozed`, `is:settled`, `is:pinned`.
+- **Summaries by your agent.** Your AI agent can write a short summary of a conversation
+  (`mail_summary`); it shows above all of the conversation's messages when you open it, in the
+  form you asked your agent for. It says which agent wrote it and when, and when newer mail came
+  since. Fancy Mail has no AI of its own; `has:summary` finds conversations that have one.
 - **Labels across accounts.** "Invoices" is one label for every account. On Gmail it is a real
   Gmail label, elsewhere an IMAP keyword — your organization survives this app.
 - **Signed in once.** Gmail with an app password (or Google sign-in), Outlook with Microsoft
@@ -70,12 +74,12 @@ Each account has an agent access level:
 |---|---|
 | Hidden | not see the account at all |
 | Read | search, read, open attachments |
-| Organize | + labels, archive, read state, stars, trash |
+| Organize | + labels, archive, read state, stars, trash, summaries |
 | Draft | + write drafts for you to review (new accounts start here) |
 | Send | + send mail |
 
 The tools: `mail_overview`, `mail_search`, `mail_read_thread`, `mail_get_attachment`,
-`mail_organize`, `mail_labels`, `mail_groups`, `mail_draft`, `mail_send_draft`,
+`mail_organize`, `mail_summary`, `mail_labels`, `mail_groups`, `mail_draft`, `mail_send_draft`,
 `mail_activity`. Email content is treated as untrusted input; agents are told never to act on
 instructions found inside emails. Fancy Mail must be running (it can stay in the tray) for
 agents to reach it.

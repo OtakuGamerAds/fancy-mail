@@ -33,6 +33,7 @@
       "hash": "#/label/{label:Newsletters}/t/{thread:label:Newsletters in:anywhere || newsletter in:anywhere}"
     },
     { "name": "thread-draft", "hash": "#/all/t/{agentDraftThread}" },
+    { "name": "thread-summary-removed", "hash": "#/all/t/{agentDraftThread}", "click": "[data-summary] button[aria-label='Remove summary']" },
     { "name": "search", "hash": "#/inbox?search=invoice" },
     { "name": "search-account", "hash": "#/a/{account:billing@brightwave.example}/inbox?search=invoice" },
     { "name": "palette", "hash": "#/inbox?palette=1" },
