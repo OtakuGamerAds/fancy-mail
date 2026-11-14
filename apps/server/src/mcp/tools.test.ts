@@ -127,11 +127,12 @@ function fakeApi(levels: { business: AgentAccess; bank: AgentAccess }) {
     ensureBodies: async () => {},
     setSummary: (threadId, text, actor) => {
       need(threads.find((t) => t.id === threadId)!.accountId, "organize", actor);
-      if (!text.trim()) {
+      const clean = (text ?? "").trim();
+      if (!clean) {
         summaries.delete(threadId);
         return { summary: null };
       }
-      const summary = { text: text.trim(), by: actor, at: new Date(2026, 9, 4, 8, 0).getTime() };
+      const summary = { text: clean, by: actor, at: new Date(2026, 9, 4, 8, 0).getTime() };
       summaries.set(threadId, summary);
       return { summary };
     },
